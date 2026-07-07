@@ -16,7 +16,10 @@ export class GameOver extends Scene {
     this.camera.setBackgroundColor(0xff0000);
 
     // Background – create once, full-screen
-    this.background = this.add.image(0, 0, 'background').setOrigin(0).setAlpha(0.5);
+    this.background = this.add
+      .image(0, 0, 'background')
+      .setOrigin(0)
+      .setAlpha(0.5);
 
     // "Game Over" text – created once and scaled responsively
     this.gameover_text = this.add
