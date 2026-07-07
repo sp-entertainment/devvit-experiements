@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "<% name %>",
+  "name": "devvit-experiments",
   "post": {
     "dir": "dist/client",
     "entrypoints": {
@@ -17,6 +17,13 @@
     "dir": "dist/server",
     "entry": "index.cjs"
   },
+  "permissions": {
+    "reddit": true,
+    "redis": true,
+    "realtime": true,
+    "media": true,
+    "payments": true
+  },
   "menu": {
     "items": [
       {
@@ -32,14 +39,51 @@
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/example-form"
+      },
+      {
+        "label": "Rich form demo",
+        "description": "Show a form with every field type",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/rich-form"
       }
     ]
   },
   "forms": {
-    "exampleForm": "/internal/form/example-submit"
+    "exampleForm": "/internal/form/example-submit",
+    "richForm": "/internal/form/rich-submit"
   },
   "triggers": {
-    "onAppInstall": "/internal/triggers/on-app-install"
+    "onAppInstall": "/internal/triggers/on-app-install",
+    "onCommentCreate": "/internal/triggers/on-comment-create"
+  },
+  "scheduler": {
+    "tasks": {
+      "reminder": {
+        "endpoint": "/internal/scheduler/reminder"
+      },
+      "dailyReset": {
+        "endpoint": "/internal/scheduler/daily-reset",
+        "cron": "0 0 * * *"
+      }
+    }
+  },
+  "payments": {
+    "productsFile": "products.json",
+    "endpoints": {
+      "fulfillOrder": "/internal/payments/fulfill",
+      "refundOrder": "/internal/payments/refund"
+    }
+  },
+  "settings": {
+    "subreddit": {
+      "welcomeMessage": {
+        "type": "string",
+        "label": "Welcome message",
+        "helpText": "Shown to players in the Settings example category.",
+        "defaultValue": "Welcome to the Devvit Kitchen Sink!"
+      }
+    }
   },
   "scripts": {
     "build": "vite build",
