@@ -10,7 +10,6 @@ import { Preloader } from './scenes/Preloader';
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Phaser.Types.Core.GameConfig = {
   type: AUTO,
-  parent: 'game-container',
   backgroundColor: '#028af8',
   scale: {
     // Keep a fixed game resolution but automatically scale it to fit within the available
@@ -23,10 +22,20 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [Boot, Preloader, MainMenu, MainGame, GameOver],
 };
 
-const StartGame = (parent: string) => {
-  return new Game({ ...config, parent });
+let currentGame: Game | undefined;
+
+/** (Re)starts the Phaser game inside the element with id `parentId`. Idempotent:
+ * calling it again (e.g. re-opening the "Rendering Demo" tab) tears down the
+ * previous instance first rather than leaking a second running game loop. */
+export const startPhaserGame = (parentId: string): Game => {
+  currentGame?.destroy(true);
+  currentGame = new Game({ ...config, parent: parentId });
+  return currentGame;
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  StartGame('game-container');
-});
+/** Tears down the running game loop, e.g. when navigating away from the
+ * "Rendering Demo" tab so it doesn't keep rendering in the background. */
+export const stopPhaserGame = (): void => {
+  currentGame?.destroy(true);
+  currentGame = undefined;
+};
