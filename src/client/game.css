@@ -190,3 +190,74 @@ body {
   border-radius: 10px;
   overflow: hidden;
 }
+
+.ks-canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.ks-tool-button {
+  background: #232323;
+  color: rgba(255, 255, 255, 0.82);
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ks-tool-button:hover {
+  background: #2d2d2d;
+}
+
+.ks-tool-active {
+  background: #d93900;
+  border-color: #d93900;
+  color: #fff;
+}
+
+.ks-swatch-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ks-swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.ks-swatch-active {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px #d93900;
+}
+
+.ks-canvas-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+.ks-canvas-size input {
+  width: 120px;
+}
+
+.ks-canvas-status {
+  margin: 0 0 10px;
+  color: #7fd858;
+  font-size: 13px;
+}
+
+.ks-canvas-channel-status {
+  margin: 0 0 4px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+}

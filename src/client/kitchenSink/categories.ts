@@ -14,8 +14,21 @@ import {
 import { trpc } from '../trpc';
 import { el, exampleRow, paragraph, sectionHeading } from './ui';
 import { startPhaserGame } from '../phaserGame';
+import {
+  startSharedCanvasDemo,
+  type SharedCanvasTool,
+} from '../sharedCanvasDemo';
 import { startSmoothMovementDemo } from '../smoothMovementDemo';
 import { onCursorConnectionChange, onCursorMessage } from '../realtimeChannel';
+import {
+  canvasChannelName,
+  onCanvasConnectionChange,
+} from '../canvasRealtimeChannel';
+import {
+  CANVAS_COLORS,
+  CANVAS_ERASER_MAX_RADIUS,
+  CANVAS_ERASER_MIN_RADIUS,
+} from '../../shared/realtime';
 
 export type Category = {
   id: string;
@@ -840,6 +853,104 @@ const buildSmoothMovement = (container: HTMLElement) => {
   startSmoothMovementDemo('smooth-movement-container');
 };
 
+const buildSharedCanvas = (container: HTMLElement) => {
+  let tool: SharedCanvasTool = 'pixel';
+  let color = CANVAS_COLORS[5] ?? '#38bdf8';
+  let eraserRadius = 32;
+
+  container.append(
+    sectionHeading('Shared Canvas'),
+    paragraph(
+      'Dedicated realtime channel example: click to add pixels, click in Text mode to type words, or erase anything on the shared post canvas.'
+    )
+  );
+
+  const toolbar = el('div', 'ks-canvas-toolbar');
+  const toolButtons = new Map<SharedCanvasTool, HTMLButtonElement>();
+  const colorButtons: HTMLButtonElement[] = [];
+
+  const updateControls = () => {
+    for (const [buttonTool, button] of toolButtons) {
+      button.classList.toggle('ks-tool-active', buttonTool === tool);
+    }
+    for (const button of colorButtons) {
+      button.classList.toggle('ks-swatch-active', button.dataset.color === color);
+    }
+  };
+
+  const addToolButton = (buttonTool: SharedCanvasTool, label: string) => {
+    const button = el('button', 'ks-tool-button');
+    button.textContent = label;
+    button.addEventListener('click', () => {
+      tool = buttonTool;
+      updateControls();
+    });
+    toolButtons.set(buttonTool, button);
+    toolbar.append(button);
+  };
+
+  addToolButton('pixel', 'Pixel');
+  addToolButton('text', 'Text');
+  addToolButton('erase', 'Erase');
+
+  const colorGroup = el('div', 'ks-swatch-group');
+  for (const swatch of CANVAS_COLORS) {
+    const button = el('button', 'ks-swatch');
+    button.style.backgroundColor = swatch;
+    button.dataset.color = swatch;
+    button.ariaLabel = `Use ${swatch}`;
+    button.addEventListener('click', () => {
+      color = swatch;
+      updateControls();
+    });
+    colorButtons.push(button);
+    colorGroup.append(button);
+  }
+  toolbar.append(colorGroup);
+
+  const eraserLabel = el('label', 'ks-canvas-size');
+  const eraserText = el('span');
+  eraserText.textContent = 'Size';
+  const eraserInput = document.createElement('input');
+  eraserInput.type = 'range';
+  eraserInput.min = String(CANVAS_ERASER_MIN_RADIUS);
+  eraserInput.max = String(CANVAS_ERASER_MAX_RADIUS);
+  eraserInput.step = '8';
+  eraserInput.value = String(eraserRadius);
+  eraserInput.addEventListener('input', () => {
+    eraserRadius = Number(eraserInput.value);
+  });
+  eraserLabel.append(eraserText, eraserInput);
+  toolbar.append(eraserLabel);
+
+  const status = el('p', 'ks-canvas-status');
+  status.textContent = 'Connecting...';
+  const channelStatus = el('p', 'ks-canvas-channel-status');
+  channelStatus.textContent = `Canvas channel ${canvasChannelName()}: connecting`;
+
+  const gameContainer = el('div', 'ks-phaser-container');
+  gameContainer.id = 'shared-canvas-container';
+
+  updateControls();
+  container.append(toolbar, channelStatus, status, gameContainer);
+
+  const unsubscribeChannelStatus = onCanvasConnectionChange((connected) => {
+    channelStatus.textContent = `Canvas channel ${canvasChannelName()}: ${
+      connected ? 'connected' : 'disconnected'
+    }`;
+  });
+  startSharedCanvasDemo('shared-canvas-container', {
+    getTool: () => tool,
+    getColor: () => color,
+    getEraserRadius: () => eraserRadius,
+    setStatus: (text) => {
+      status.textContent = text;
+    },
+  });
+
+  return unsubscribeChannelStatus;
+};
+
 export const categories: Category[] = [
   { id: 'reddit', label: 'Reddit API', build: buildReddit },
   { id: 'redis', label: 'Redis', build: buildRedis },
@@ -856,4 +967,5 @@ export const categories: Category[] = [
   { id: 'client', label: 'Client Effects', build: buildClientEffects },
   { id: 'rendering', label: 'Rendering Demo', build: buildRendering },
   { id: 'smooth-movement', label: 'Smooth Movement', build: buildSmoothMovement },
+  { id: 'shared-canvas', label: 'Shared Canvas', build: buildSharedCanvas },
 ];

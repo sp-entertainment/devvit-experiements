@@ -2,6 +2,7 @@ import { showToast } from '@devvit/web/client';
 import { categories } from './kitchenSink/categories';
 import { el, errorMessage } from './kitchenSink/ui';
 import { stopPhaserGame } from './phaserGame';
+import { stopSharedCanvasDemo } from './sharedCanvasDemo';
 import { stopSmoothMovementDemo } from './smoothMovementDemo';
 
 const root = document.getElementById('kitchen-sink');
@@ -36,6 +37,7 @@ const renderActive = () => {
   // Only one category's Phaser instance should ever be running at a time.
   if (category.id !== 'rendering') stopPhaserGame();
   if (category.id !== 'smooth-movement') stopSmoothMovementDemo();
+  if (category.id !== 'shared-canvas') stopSharedCanvasDemo();
 
   content.innerHTML = '';
   try {
