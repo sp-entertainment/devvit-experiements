@@ -1,4 +1,6 @@
-## Devvit Phaser Starter
+## devvit-experiments
+
+Deployable "kitchen sink" that exercises nearly every Devvit Web capability (Reddit API, Redis, Realtime, Media, Notifications, Payments, Scheduler, Settings, Cache, Forms, Menu Items, Triggers, and client-side effects), organized behind a tRPC API and a categorized in-app menu, each example commented to explain what it demonstrates.
 
 A starter to build web applications on Reddit's developer platform
 
