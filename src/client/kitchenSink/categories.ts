@@ -14,6 +14,7 @@ import {
 import { trpc } from '../trpc';
 import { el, exampleRow, paragraph, sectionHeading } from './ui';
 import { startPhaserGame } from '../phaserGame';
+import { startSmoothMovementDemo } from '../smoothMovementDemo';
 import { onCursorConnectionChange, onCursorMessage } from '../realtimeChannel';
 
 export type Category = {
@@ -824,6 +825,21 @@ const buildRendering = (container: HTMLElement) => {
   startPhaserGame('game-container');
 };
 
+const buildSmoothMovement = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Smooth Movement (Realtime + Phaser)'),
+    paragraph(
+      'Each tab owns one colored ball. Redis stores the authoritative positions, Realtime broadcasts point-to-point moves, and Phaser tweens the render.'
+    )
+  );
+
+  const gameContainer = el('div', 'ks-phaser-container');
+  gameContainer.id = 'smooth-movement-container';
+  container.append(gameContainer);
+
+  startSmoothMovementDemo('smooth-movement-container');
+};
+
 export const categories: Category[] = [
   { id: 'reddit', label: 'Reddit API', build: buildReddit },
   { id: 'redis', label: 'Redis', build: buildRedis },
@@ -839,4 +855,5 @@ export const categories: Category[] = [
   { id: 'dashboard', label: 'Dashboard', build: buildDashboard },
   { id: 'client', label: 'Client Effects', build: buildClientEffects },
   { id: 'rendering', label: 'Rendering Demo', build: buildRendering },
+  { id: 'smooth-movement', label: 'Smooth Movement', build: buildSmoothMovement },
 ];
