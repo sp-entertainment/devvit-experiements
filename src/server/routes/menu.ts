@@ -1,9 +1,13 @@
 import { Hono } from 'hono';
-import type { UiResponse } from '@devvit/web/shared';
+import type { MenuItemRequest, UiResponse } from '@devvit/web/shared';
 import { context } from '@devvit/web/server';
 import { createPost } from '../core/post';
+import { recordMenu } from '../core/devvitEvents';
 
 export const menu = new Hono();
+
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
 
 // Simplest possible menu item: create a new custom post in the subreddit the app is
 // installed in via `reddit.submitCustomPost` (see src/server/core/post.ts).
@@ -111,4 +115,39 @@ menu.post('/rich-form', (c) => {
     },
     200
   );
+});
+
+menu.post('/post-context', async (c) => {
+  const input = await c.req.json<MenuItemRequest>();
+  await recordMenu('post', {
+    location: input.location,
+    targetId: input.targetId,
+  });
+
+  return c.json<UiResponse>(
+    {
+      showToast: `Post menu fired for ${input.targetId}`,
+    },
+    200
+  );
+});
+
+menu.post('/comment-context', async (c) => {
+  const input = await c.req.json<MenuItemRequest>();
+  await recordMenu('comment', {
+    location: input.location,
+    targetId: input.targetId,
+  });
+
+  return c.json<UiResponse>(
+    {
+      showToast: `Comment menu fired for ${input.targetId}`,
+    },
+    200
+  );
+});
+
+menu.onError((error, c) => {
+  console.error('Menu route failed:', error);
+  return c.json<UiResponse>({ showToast: `Menu error: ${errorMessage(error)}` }, 200);
 });

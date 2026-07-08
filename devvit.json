@@ -18,7 +18,15 @@
     "entry": "index.cjs"
   },
   "permissions": {
-    "reddit": true,
+    "reddit": {
+      "enable": true,
+      "scope": "moderator",
+      "asUser": [
+        "SUBMIT_POST",
+        "SUBMIT_COMMENT",
+        "SUBSCRIBE_TO_SUBREDDIT"
+      ]
+    },
     "redis": true,
     "realtime": true,
     "media": true,
@@ -46,6 +54,22 @@
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/rich-form"
+      },
+      {
+        "label": "Kitchen sink post context",
+        "description": "Toast and log the selected post target",
+        "location": "post",
+        "postFilter": "currentApp",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/post-context"
+      },
+      {
+        "label": "Kitchen sink comment context",
+        "description": "Toast and log the selected comment target",
+        "location": "comment",
+        "postFilter": "currentApp",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/comment-context"
       }
     ]
   },
@@ -55,7 +79,11 @@
   },
   "triggers": {
     "onAppInstall": "/internal/triggers/on-app-install",
-    "onCommentCreate": "/internal/triggers/on-comment-create"
+    "onCommentCreate": "/internal/triggers/on-comment-create",
+    "onPostSubmit": "/internal/triggers/on-post-submit",
+    "onCommentSubmit": "/internal/triggers/on-comment-submit",
+    "onPostReport": "/internal/triggers/on-post-report",
+    "onModAction": "/internal/triggers/on-mod-action"
   },
   "scheduler": {
     "tasks": {

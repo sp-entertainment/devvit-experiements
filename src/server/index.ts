@@ -8,6 +8,7 @@ import { menu } from './routes/menu';
 import { triggers } from './routes/triggers';
 import { scheduler } from './routes/scheduler';
 import { payments } from './routes/payments';
+import { honoLab } from './routes/honoLab';
 
 const app = new Hono();
 const internal = new Hono();
@@ -19,6 +20,7 @@ app.use(
   '/api/trpc/*',
   trpcServer({ router: appRouter, endpoint: '/api/trpc' })
 );
+app.route('/api/hono', honoLab);
 
 // Everything Devvit itself calls by a fixed URL contract (menu items, form submits,
 // triggers, scheduled tasks, payment fulfillment) stays as plain Hono routes, wired up

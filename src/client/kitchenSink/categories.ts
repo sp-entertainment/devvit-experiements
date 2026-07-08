@@ -1,4 +1,5 @@
 import {
+  canRunAsUser,
   context,
   exitExpandedMode,
   getShareData,
@@ -21,6 +22,22 @@ export type Category = {
   /** Returns an optional cleanup function, called when the user navigates to a
    * different tab (e.g. to unsubscribe from realtime listeners). */
   build: (container: HTMLElement) => void | (() => void);
+};
+
+const ensureCanRunAsUser = async (event: MouseEvent) => {
+  const granted = await canRunAsUser(event);
+  if (!granted)
+    throw new Error('The viewer has not granted the requested User Action scopes.');
+  return { granted };
+};
+
+const honoJson = async (path: string, init?: RequestInit) => {
+  const response = await fetch(`/api/hono${path}`, init);
+  return {
+    ok: response.ok,
+    status: response.status,
+    body: await response.json(),
+  };
 };
 
 const buildReddit = (container: HTMLElement) => {
@@ -46,6 +63,63 @@ const buildReddit = (container: HTMLElement) => {
       ],
       run: (values) =>
         trpc.reddit.getHotPosts.query({ limit: Number(values('limit')) || 5 }),
+    }),
+    exampleRow({
+      title: 'Listing comparison',
+      description:
+        'Compare hot, new, rising, top/day, and controversial/day listings.',
+      inputs: [
+        { id: 'limit', label: 'limit', type: 'number', defaultValue: '3' },
+      ],
+      run: (values) =>
+        trpc.reddit.listings.compare.query({
+          limit: Number(values('limit')) || 3,
+        }),
+    }),
+    exampleRow({
+      title: 'Inspect current post + comments',
+      description: 'Read this post plus a few comments beneath it.',
+      inputs: [
+        {
+          id: 'commentsLimit',
+          label: 'comments',
+          type: 'number',
+          defaultValue: '5',
+        },
+      ],
+      run: (values) =>
+        trpc.reddit.inspect.currentPost.query({
+          commentsLimit: Number(values('commentsLimit')) || 5,
+        }),
+    }),
+    exampleRow({
+      title: 'Inspect post by ID',
+      description: 'Fetch one post by its t3_ ID.',
+      inputs: [
+        { id: 'postId', label: 'post id', defaultValue: context.postId ?? '' },
+      ],
+      run: (values) =>
+        trpc.reddit.inspect.post.query({ postId: values('postId') }),
+    }),
+    exampleRow({
+      title: 'Inspect comment by ID',
+      description: 'Fetch one comment by its t1_ ID.',
+      inputs: [{ id: 'commentId', label: 'comment id', defaultValue: '' }],
+      run: (values) =>
+        trpc.reddit.inspect.comment.query({ commentId: values('commentId') }),
+    }),
+    exampleRow({
+      title: 'Inspect user by username',
+      description: 'Fetch a public user summary.',
+      inputs: [
+        {
+          id: 'username',
+          label: 'username',
+          defaultValue: context.username ?? 'devvit',
+        },
+      ],
+      run: (values) =>
+        trpc.reddit.inspect.user.query({ username: values('username') }),
     }),
     exampleRow({
       title: 'submitCustomPost ("Hello World")',
@@ -97,6 +171,138 @@ const buildReddit = (container: HTMLElement) => {
       title: 'createShareUrl',
       description: 'Generate a shortened, shareable link to this post.',
       run: () => trpc.reddit.createShareUrl.mutate(),
+    }),
+    exampleRow({
+      title: 'canRunAsUser',
+      description:
+        'Check whether the viewer granted the configured User Action scopes.',
+      run: (_values, event) => ensureCanRunAsUser(event),
+    }),
+    exampleRow({
+      title: 'submitPost runAs USER',
+      description: 'Create a normal self post as the viewer.',
+      buttonLabel: 'Submit as user',
+      inputs: [
+        {
+          id: 'title',
+          label: 'title',
+          defaultValue: '[Kitchen Sink] user-action test - delete me',
+        },
+        {
+          id: 'text',
+          label: 'text',
+          defaultValue: 'Created from a Devvit User Actions toy.',
+        },
+      ],
+      run: async (values, event) => ({
+        permission: await ensureCanRunAsUser(event),
+        post: await trpc.reddit.userActions.submitPostAsUser.mutate({
+          title: values('title'),
+          text: values('text'),
+        }),
+      }),
+    }),
+    exampleRow({
+      title: 'submitComment runAs USER',
+      description: 'Comment on the current post as the viewer.',
+      buttonLabel: 'Comment as user',
+      inputs: [
+        {
+          id: 'text',
+          label: 'text',
+          defaultValue: '[Kitchen Sink] user-action comment - delete me',
+        },
+      ],
+      run: async (values, event) => ({
+        permission: await ensureCanRunAsUser(event),
+        comment: await trpc.reddit.userActions.commentOnCurrentPostAsUser.mutate(
+          {
+            text: values('text'),
+          }
+        ),
+      }),
+    }),
+    exampleRow({
+      title: 'subscribeToCurrentSubreddit',
+      description: 'Subscribe to this subreddit via User Actions.',
+      buttonLabel: 'Subscribe as user',
+      run: async (_values, event) => ({
+        permission: await ensureCanRunAsUser(event),
+        result: await trpc.reddit.userActions.subscribeAsUser.mutate(),
+      }),
+    }),
+    exampleRow({
+      title: 'unsubscribeFromCurrentSubreddit',
+      description:
+        'Calls the SDK unsubscribe helper; Devvit exposes subscribe as the true User Action.',
+      buttonLabel: 'Unsubscribe',
+      run: async (_values, event) => ({
+        permission: await ensureCanRunAsUser(event),
+        result: await trpc.reddit.userActions.unsubscribeAsUser.mutate(),
+      }),
+    }),
+    exampleRow({
+      title: 'Flair templates',
+      description: 'Read post and user flair templates for this subreddit.',
+      run: () => trpc.reddit.flair.templates.query(),
+    }),
+    exampleRow({
+      title: 'setPostFlair',
+      description: 'Set text flair on a post, defaulting to this custom post.',
+      inputs: [
+        { id: 'postId', label: 'post id', defaultValue: context.postId ?? '' },
+        { id: 'text', label: 'text', defaultValue: 'Kitchen Sink' },
+      ],
+      run: (values) =>
+        trpc.reddit.flair.setPost.mutate({
+          postId: values('postId'),
+          text: values('text'),
+        }),
+    }),
+    exampleRow({
+      title: 'removePostFlair',
+      description: 'Remove post flair from a post.',
+      inputs: [
+        { id: 'postId', label: 'post id', defaultValue: context.postId ?? '' },
+      ],
+      run: (values) =>
+        trpc.reddit.flair.removePost.mutate({ postId: values('postId') }),
+    }),
+    exampleRow({
+      title: 'Wiki sandbox: read',
+      description: 'Read the fixed devvit-kitchen-sink-sandbox wiki page.',
+      run: () => trpc.reddit.wiki.readSandbox.query(),
+    }),
+    exampleRow({
+      title: 'Wiki sandbox: update/create',
+      description: 'Create or update the fixed sandbox wiki page.',
+      inputs: [
+        {
+          id: 'markdown',
+          label: 'markdown',
+          defaultValue: '# Devvit Kitchen Sink Sandbox\n\nUpdated from the app.',
+        },
+      ],
+      run: (values) =>
+        trpc.reddit.wiki.updateSandbox.mutate({
+          markdown: values('markdown'),
+        }),
+    }),
+    exampleRow({
+      title: 'Wiki sandbox: revisions',
+      description: 'Read recent revisions for the sandbox wiki page.',
+      run: () => trpc.reddit.wiki.revisions.query(),
+    }),
+    exampleRow({
+      title: 'Moderation snapshot',
+      description: 'Read rules, mod queue, and reports without taking action.',
+      inputs: [
+        { id: 'limit', label: 'limit', type: 'number', defaultValue: '5' },
+      ],
+      run: (values) =>
+        trpc.reddit.moderation.snapshot.query({
+          limit: Number(values('limit')) || 5,
+        }),
     })
   );
 };
@@ -500,6 +706,108 @@ const buildClientEffects = (container: HTMLElement) => {
   );
 };
 
+const buildDevvitEvents = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Devvit Events'),
+    paragraph(
+      'Fixed-contract menu and trigger callbacks, registered in devvit.json and handled by Hono.'
+    ),
+    exampleRow({
+      title: 'Event counters + last summaries',
+      description:
+        'Read Redis-backed counts for post/comment menu items and trigger callbacks.',
+      run: () => trpc.devvitEvents.snapshot.query(),
+    })
+  );
+};
+
+const buildHonoLab = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Hono Lab'),
+    paragraph(
+      'Plain Hono routes mounted outside tRPC: params, query, JSON body parsing, notFound, and onError.'
+    ),
+    exampleRow({
+      title: 'GET /api/hono/ping',
+      description: 'Smallest possible route.',
+      run: () => honoJson('/ping'),
+    }),
+    exampleRow({
+      title: 'GET /api/hono/hello/:name',
+      description: 'Route params, query params, and request headers.',
+      inputs: [
+        { id: 'name', label: 'name', defaultValue: context.username ?? 'devvit' },
+        { id: 'shout', label: 'shout 1/0', defaultValue: '1' },
+      ],
+      run: (values) =>
+        honoJson(
+          `/hello/${encodeURIComponent(values('name'))}?shout=${encodeURIComponent(values('shout'))}`
+        ),
+    }),
+    exampleRow({
+      title: 'POST /api/hono/echo',
+      description: 'Parse and validate a JSON body with Zod.',
+      inputs: [
+        {
+          id: 'message',
+          label: 'message',
+          defaultValue: 'Hello from Hono',
+        },
+      ],
+      run: (values) =>
+        honoJson('/echo', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ message: values('message') }),
+        }),
+    }),
+    exampleRow({
+      title: 'Hono notFound',
+      description: 'Hit an unregistered Hono route.',
+      run: () => honoJson('/missing-route'),
+    }),
+    exampleRow({
+      title: 'Hono onError',
+      description: 'Hit a route that intentionally throws.',
+      run: () => honoJson('/error'),
+    })
+  );
+};
+
+const buildDashboard = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Dashboard'),
+    paragraph(
+      'One read-only snapshot assembled in the client from existing examples.'
+    ),
+    exampleRow({
+      title: 'Kitchen sink snapshot',
+      description:
+        'Current user, subreddit, listings, Devvit events, scheduler jobs, and settings.',
+      run: async () => {
+        const [me, subreddit, listings, devvitEvents, schedulerJobs, settings] =
+          await Promise.all([
+            trpc.reddit.getMe.query(),
+            trpc.reddit.getSubredditInfo.query(),
+            trpc.reddit.listings.compare.query({ limit: 3 }),
+            trpc.devvitEvents.snapshot.query(),
+            trpc.scheduler.listJobs.query(),
+            trpc.settings.getWelcomeMessage.query(),
+          ]);
+
+        return {
+          me,
+          subreddit,
+          listings,
+          devvitEvents,
+          schedulerJobs,
+          settings,
+        };
+      },
+    })
+  );
+};
+
 const buildRendering = (container: HTMLElement) => {
   container.append(
     sectionHeading('Rendering Demo (Phaser)'),
@@ -526,6 +834,9 @@ export const categories: Category[] = [
   { id: 'scheduler', label: 'Scheduler', build: buildScheduler },
   { id: 'settings', label: 'Settings', build: buildSettings },
   { id: 'cache', label: 'Cache', build: buildCache },
+  { id: 'events', label: 'Devvit Events', build: buildDevvitEvents },
+  { id: 'hono', label: 'Hono Lab', build: buildHonoLab },
+  { id: 'dashboard', label: 'Dashboard', build: buildDashboard },
   { id: 'client', label: 'Client Effects', build: buildClientEffects },
   { id: 'rendering', label: 'Rendering Demo', build: buildRendering },
 ];
