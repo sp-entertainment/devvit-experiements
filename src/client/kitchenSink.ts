@@ -1,4 +1,6 @@
+import { showToast } from '@devvit/web/client';
 import { categories } from './kitchenSink/categories';
+import { el, errorMessage } from './kitchenSink/ui';
 import { stopPhaserGame } from './phaserGame';
 
 const root = document.getElementById('kitchen-sink');
@@ -34,7 +36,16 @@ const renderActive = () => {
   if (category.id !== 'rendering') stopPhaserGame();
 
   content.innerHTML = '';
-  cleanupActive = category.build(content) ?? undefined;
+  try {
+    cleanupActive = category.build(content) ?? undefined;
+  } catch (error) {
+    const message = errorMessage(error);
+    cleanupActive = undefined;
+    const output = el('pre', 'ks-output ks-output-error');
+    output.textContent = `Error: ${message}`;
+    content.append(output);
+    showToast(`Error: ${message}`);
+  }
 
   tabs.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
     button.classList.toggle(

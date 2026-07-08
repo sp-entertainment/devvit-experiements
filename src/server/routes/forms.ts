@@ -16,6 +16,9 @@ type RichFormValues = {
 
 export const forms = new Hono();
 
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 // Devvit POSTs the submitted field values here as JSON once the user submits the
 // "Example form" menu item's modal (src/server/routes/menu.ts).
 forms.post('/example-submit', async (c) => {
@@ -42,4 +45,9 @@ forms.post('/rich-submit', async (c) => {
     },
     200
   );
+});
+
+forms.onError((error, c) => {
+  console.error('Form route failed:', error);
+  return c.json<UiResponse>({ showToast: `Form error: ${errorMessage(error)}` }, 200);
 });

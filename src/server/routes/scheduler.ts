@@ -39,3 +39,8 @@ scheduler.post('/daily-reset', async (c) => {
   console.log('dailyReset cron task ran: reset the comment counter.');
   return c.json<TaskResponse>({}, 200);
 });
+
+scheduler.onError((error, c) => {
+  console.error('Scheduler route failed:', error);
+  return c.json<TaskResponse>({}, 200);
+});

@@ -16,6 +16,9 @@ type PaymentHandlerResponse =
 
 const entitlementKey = () => `entitlement:${context.userId ?? 'unknown'}`;
 
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 // devvit.json `payments.endpoints.fulfillOrder` (required): called once a purchase is
 // paid for. Grants the buyer an entitlement flag in Redis for each SKU purchased -
 // swap this for whatever "unlock" logic your app needs (removing ads, unlocking
@@ -47,4 +50,12 @@ payments.post('/refund', async (c) => {
   }
 
   return c.json<PaymentHandlerResponse>({ success: true }, 200);
+});
+
+payments.onError((error, c) => {
+  console.error('Payment route failed:', error);
+  return c.json<PaymentHandlerResponse>(
+    { success: false, reason: errorMessage(error) },
+    200
+  );
 });

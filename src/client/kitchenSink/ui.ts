@@ -1,6 +1,8 @@
 // Small vanilla-DOM helpers shared by every kitchen-sink category. No framework -
 // this is plain HTML/CSS/TS to keep the example dependency-free and easy to read.
 
+import { showToast } from '@devvit/web/client';
+
 export type InputSpec = {
   id: string;
   label: string;
@@ -40,6 +42,9 @@ const formatOutput = (value: unknown): string => {
     2
   );
 };
+
+export const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 /** Builds one "card" for a single example: title, description, optional inputs, a
  * run button, and a panel that shows the JSON result (or error) of running it. */
@@ -89,8 +94,10 @@ export const exampleRow = (opts: ExampleRowOptions): HTMLElement => {
         const result = await opts.run(getValue, event);
         output.textContent = formatOutput(result);
       } catch (error) {
+        const message = errorMessage(error);
         output.classList.add('ks-output-error');
-        output.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+        output.textContent = `Error: ${message}`;
+        showToast(`Error: ${message}`);
       } finally {
         button.disabled = false;
       }
