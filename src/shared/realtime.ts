@@ -24,7 +24,7 @@ export const CANVAS_COLORS = [
   '#ec4899',
 ];
 
-export const canvasRealtimeChannel = (postId: string) => `canvas-${postId}`;
+export const canvasRealtimeChannel = (postId: string) => `canvas_${postId}`;
 
 export type BallPoint = {
   x: number;
