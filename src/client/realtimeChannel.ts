@@ -1,6 +1,7 @@
 import { connectRealtime, context } from '@devvit/web/client';
 import type {
   RealtimeBallMoveMessage,
+  RealtimeCanvasMessage,
   RealtimeCursorMessage,
   RealtimeMessage,
 } from '../shared/realtime';
@@ -13,12 +14,15 @@ import type {
 
 type CursorMessageListener = (msg: RealtimeCursorMessage) => void;
 type BallMoveMessageListener = (msg: RealtimeBallMoveMessage) => void;
+type CanvasMessageListener = (msg: RealtimeCanvasMessage) => void;
 type StatusListener = (connected: boolean) => void;
 
 const cursorListeners = new Set<CursorMessageListener>();
 const ballMoveListeners = new Set<BallMoveMessageListener>();
+const canvasListeners = new Set<CanvasMessageListener>();
 const statusListeners = new Set<StatusListener>();
 let started = false;
+let connected = false;
 
 const ensureConnected = () => {
   if (started) return;
@@ -26,13 +30,21 @@ const ensureConnected = () => {
 
   connectRealtime<RealtimeMessage>({
     channel: context.postId,
-    onConnect: () => statusListeners.forEach((listener) => listener(true)),
-    onDisconnect: () => statusListeners.forEach((listener) => listener(false)),
+    onConnect: () => {
+      connected = true;
+      statusListeners.forEach((listener) => listener(connected));
+    },
+    onDisconnect: () => {
+      connected = false;
+      statusListeners.forEach((listener) => listener(connected));
+    },
     onMessage: (msg) => {
       if (msg.type === 'cursor') {
         cursorListeners.forEach((listener) => listener(msg));
       } else if (msg.type === 'ballMove') {
         ballMoveListeners.forEach((listener) => listener(msg));
+      } else {
+        canvasListeners.forEach((listener) => listener(msg));
       }
     },
   });
@@ -56,10 +68,21 @@ export const onBallMoveMessage = (
   return () => ballMoveListeners.delete(listener);
 };
 
+export const onCanvasMessage = (
+  listener: CanvasMessageListener
+): (() => void) => {
+  ensureConnected();
+  canvasListeners.add(listener);
+  return () => canvasListeners.delete(listener);
+};
+
 export const onCursorConnectionChange = (
   listener: StatusListener
 ): (() => void) => {
   ensureConnected();
   statusListeners.add(listener);
+  listener(connected);
   return () => statusListeners.delete(listener);
 };
+
+export const onCanvasConnectionChange = onCursorConnectionChange;

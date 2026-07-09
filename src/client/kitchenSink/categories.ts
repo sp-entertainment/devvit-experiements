@@ -26,11 +26,11 @@ import {
   type SharedCanvasTool,
 } from '../sharedCanvasDemo';
 import { startSmoothMovementDemo } from '../smoothMovementDemo';
-import { onCursorConnectionChange, onCursorMessage } from '../realtimeChannel';
 import {
-  canvasChannelName,
   onCanvasConnectionChange,
-} from '../canvasRealtimeChannel';
+  onCursorConnectionChange,
+  onCursorMessage,
+} from '../realtimeChannel';
 import { getClientLogs, subscribeClientLogs } from '../clientLogs';
 import {
   CANVAS_COLORS,
@@ -1132,7 +1132,8 @@ const buildSharedCanvas = (container: HTMLElement) => {
   const status = el('p', 'ks-canvas-status');
   status.textContent = 'Connecting...';
   const channelStatus = el('p', 'ks-canvas-channel-status');
-  channelStatus.textContent = `Canvas channel ${canvasChannelName()}: connecting`;
+  const channelName = context.postId;
+  channelStatus.textContent = `Canvas channel ${channelName}: connecting`;
 
   const gameContainer = el('div', 'ks-phaser-container');
   gameContainer.id = 'shared-canvas-container';
@@ -1141,7 +1142,7 @@ const buildSharedCanvas = (container: HTMLElement) => {
   container.append(toolbar, channelStatus, status, gameContainer);
 
   const unsubscribeChannelStatus = onCanvasConnectionChange((connected) => {
-    channelStatus.textContent = `Canvas channel ${canvasChannelName()}: ${
+    channelStatus.textContent = `Canvas channel ${channelName}: ${
       connected ? 'connected' : 'disconnected'
     }`;
   });

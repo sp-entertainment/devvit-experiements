@@ -25,7 +25,6 @@ export const CANVAS_COLORS = [
   '#ec4899',
 ];
 
-export const canvasRealtimeChannel = (postId: string) => `canvas_${postId}`;
 export const smoothMovementBallsKey = (postId: string) =>
   `smooth-movement:v${SMOOTH_MOVEMENT_STATE_VERSION}:balls:${postId}`;
 export const sharedCanvasKey = (postId: string) => `canvas:${postId}`;
@@ -162,4 +161,5 @@ export type RealtimeCanvasMessage =
 
 export type RealtimeMessage =
   | RealtimeCursorMessage
-  | RealtimeBallMoveMessage;
+  | RealtimeBallMoveMessage
+  | RealtimeCanvasMessage;

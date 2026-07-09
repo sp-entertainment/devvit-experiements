@@ -17,7 +17,6 @@ import {
   CANVAS_MAX_TEXT_LENGTH,
   CANVAS_WORLD_HEIGHT,
   CANVAS_WORLD_WIDTH,
-  canvasRealtimeChannel,
   ballMoveMessageFromState,
   ballMovementDuration,
   sharedCanvasKey,
@@ -392,10 +391,7 @@ export const realtimeRouter = router({
         await redis.hSet(sharedCanvasKey(postId), {
           [item.id]: JSON.stringify(item),
         });
-        await realtime.send<RealtimeCanvasPutMessage>(
-          canvasRealtimeChannel(postId),
-          message
-        );
+        await realtime.send<RealtimeCanvasPutMessage>(postId, message);
         return { item };
       }),
 
@@ -432,10 +428,7 @@ export const realtimeRouter = router({
         await redis.hSet(sharedCanvasKey(postId), {
           [item.id]: JSON.stringify(item),
         });
-        await realtime.send<RealtimeCanvasPutMessage>(
-          canvasRealtimeChannel(postId),
-          message
-        );
+        await realtime.send<RealtimeCanvasPutMessage>(postId, message);
         return { item };
       }),
 
@@ -467,10 +460,7 @@ export const realtimeRouter = router({
           };
 
           await redis.hDel(key, ids);
-          await realtime.send<RealtimeCanvasEraseMessage>(
-            canvasRealtimeChannel(postId),
-            message
-          );
+          await realtime.send<RealtimeCanvasEraseMessage>(postId, message);
         }
 
         return { ids };

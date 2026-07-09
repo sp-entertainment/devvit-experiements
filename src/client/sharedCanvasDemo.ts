@@ -1,7 +1,7 @@
 import { showToast } from '@devvit/web/client';
 import * as Phaser from 'phaser';
 import { AUTO, Game } from 'phaser';
-import { onCanvasMessage } from './canvasRealtimeChannel';
+import { onCanvasMessage } from './realtimeChannel';
 import { trpc } from './trpc';
 import {
   CANVAS_CELL_SIZE,
@@ -26,6 +26,7 @@ export type SharedCanvasControls = {
 
 type CanvasView = {
   object: Phaser.GameObjects.GameObject;
+  item: CanvasItem;
 };
 
 type DraftText = {
@@ -60,6 +61,7 @@ class SharedCanvasScene extends Phaser.Scene {
   paintedThisDrag = new Set<string>();
   draft: DraftText | undefined;
   unsubscribeRealtime: (() => void) | undefined;
+  snapshotTimer: number | undefined;
   lastEraseAt = 0;
   active = false;
 
@@ -93,6 +95,8 @@ class SharedCanvasScene extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
     void this.loadSnapshot();
+    // ponytail: short polling fallback; remove when Devvit realtime canvas events are reliable.
+    this.snapshotTimer = window.setInterval(() => void this.loadSnapshot(false), 1500);
   }
 
   drawGrid() {
@@ -114,13 +118,15 @@ class SharedCanvasScene extends Phaser.Scene {
     if (this.active) this.controls.setStatus(text);
   }
 
-  async loadSnapshot() {
+  async loadSnapshot(showStatus = true) {
+    const requestedAt = Date.now();
     try {
       const snapshot = await trpc.realtime.canvas.snapshot.query();
       if (!this.active) return;
 
-      for (const item of snapshot.items) this.applyPut(item);
-      this.setStatus(`Connected. ${snapshot.items.length} marks loaded.`);
+      this.applySnapshot(snapshot.items, requestedAt);
+      if (showStatus)
+        this.setStatus(`Connected. ${snapshot.items.length} marks loaded.`);
     } catch (error) {
       if (!this.active) return;
 
@@ -128,6 +134,16 @@ class SharedCanvasScene extends Phaser.Scene {
       this.setStatus(`Canvas load failed: ${message}`);
       showToast(`Canvas load failed: ${message}`);
     }
+  }
+
+  applySnapshot(items: CanvasItem[], requestedAt: number) {
+    if (!this.active) return;
+
+    const ids = new Set(items.map((item) => item.id));
+    for (const [id, view] of this.items) {
+      if (!ids.has(id) && view.item.updatedAt <= requestedAt) this.applyErase([id]);
+    }
+    for (const item of items) this.applyPut(item);
   }
 
   handlePointer(pointer: Phaser.Input.Pointer, freshClick: boolean) {
@@ -306,7 +322,9 @@ class SharedCanvasScene extends Phaser.Scene {
   applyPut(item: CanvasItem) {
     if (!this.active) return;
 
-    this.items.get(item.id)?.object.destroy();
+    const current = this.items.get(item.id);
+    if (current?.item.updatedAt === item.updatedAt) return;
+    current?.object.destroy();
 
     if (item.kind === 'pixel') {
       const object = this.add
@@ -320,7 +338,7 @@ class SharedCanvasScene extends Phaser.Scene {
         )
         .setOrigin(0)
         .setDepth(2);
-      this.items.set(item.id, { object });
+      this.items.set(item.id, { object, item });
       return;
     }
 
@@ -334,7 +352,7 @@ class SharedCanvasScene extends Phaser.Scene {
       })
       .setOrigin(0, 0.5)
       .setDepth(2);
-    this.items.set(item.id, { object });
+    this.items.set(item.id, { object, item });
   }
 
   applyErase(ids: string[]) {
@@ -349,6 +367,7 @@ class SharedCanvasScene extends Phaser.Scene {
   cleanup() {
     this.active = false;
     this.unsubscribeRealtime?.();
+    if (this.snapshotTimer !== undefined) window.clearInterval(this.snapshotTimer);
     this.cancelDraft();
     for (const { object } of this.items.values()) {
       object.destroy();
