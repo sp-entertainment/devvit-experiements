@@ -1,3 +1,4 @@
+import './clientLogs';
 import { context, showToast } from '@devvit/web/client';
 import { categories } from './kitchenSink/categories';
 import { el, errorMessage } from './kitchenSink/ui';

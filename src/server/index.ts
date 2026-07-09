@@ -9,9 +9,12 @@ import { triggers } from './routes/triggers';
 import { scheduler } from './routes/scheduler';
 import { payments } from './routes/payments';
 import { honoLab } from './routes/honoLab';
+import { installServerLogCapture } from './core/serverLogs';
 
 const app = new Hono();
 const internal = new Hono();
+
+installServerLogCapture();
 
 // Everything the client actively calls (Reddit API, Redis, realtime publish, media,
 // notifications, payments reads, settings, cache) is exposed as a single typed tRPC

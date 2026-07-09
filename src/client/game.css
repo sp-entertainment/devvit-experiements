@@ -197,6 +197,58 @@ body {
   border-color: #5a2626;
 }
 
+.ks-log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+
+.ks-log-limit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+.ks-log-limit input {
+  width: 96px;
+  background: #0f0f0f;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #fff;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+
+.ks-log-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+.ks-log-command {
+  max-height: none;
+  margin-bottom: 12px;
+}
+
+.ks-log-output {
+  width: 100%;
+  min-height: 260px;
+  max-height: 55vh;
+}
+
+.ks-log-nowrap {
+  white-space: pre;
+  word-break: normal;
+  overflow-x: auto;
+}
+
 .ks-phaser-container {
   width: 100%;
   height: 70vh;

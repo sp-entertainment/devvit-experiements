@@ -11,8 +11,15 @@ import {
   showShareSheet,
   showToast,
 } from '@devvit/web/client';
+import type { LogEntry } from '../../shared/logs';
 import { trpc } from '../trpc';
-import { el, exampleRow, paragraph, sectionHeading } from './ui';
+import {
+  el,
+  errorMessage,
+  exampleRow,
+  paragraph,
+  sectionHeading,
+} from './ui';
 import { startPhaserGame } from '../phaserGame';
 import {
   startSharedCanvasDemo,
@@ -24,6 +31,7 @@ import {
   canvasChannelName,
   onCanvasConnectionChange,
 } from '../canvasRealtimeChannel';
+import { getClientLogs, subscribeClientLogs } from '../clientLogs';
 import {
   CANVAS_COLORS,
   CANVAS_ERASER_MAX_RADIUS,
@@ -52,6 +60,17 @@ const honoJson = async (path: string, init?: RequestInit) => {
     status: response.status,
     body: await response.json(),
   };
+};
+
+const formatLogEntries = (logs: LogEntry[]): string => {
+  if (!logs.length) return '(no logs captured yet)';
+
+  return logs
+    .map((entry) => {
+      const time = new Date(entry.timestamp).toLocaleTimeString();
+      return `[${time}] ${entry.source} ${entry.level.toUpperCase()} ${entry.message}`;
+    })
+    .join('\n');
 };
 
 const buildReddit = (container: HTMLElement) => {
@@ -756,6 +775,157 @@ const buildClientEffects = (container: HTMLElement) => {
   );
 };
 
+const buildClientLogs = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Client Logs'),
+    paragraph('Current expanded-view console output captured in this iframe.')
+  );
+
+  const toolbar = el('div', 'ks-log-toolbar');
+  const copyButton = el('button', 'ks-button');
+  copyButton.textContent = 'Copy all';
+  const wrapLabel = el('label', 'ks-log-toggle');
+  const wrapInput = document.createElement('input');
+  wrapInput.type = 'checkbox';
+  const wrapText = el('span');
+  wrapText.textContent = 'Line wrap';
+  wrapLabel.append(wrapInput, wrapText);
+  toolbar.append(copyButton, wrapLabel);
+
+  const output = el('pre', 'ks-output ks-log-output ks-log-nowrap');
+  const render = () => {
+    output.textContent = formatLogEntries(getClientLogs());
+  };
+
+  copyButton.addEventListener('click', () => {
+    void navigator.clipboard
+      .writeText(formatLogEntries(getClientLogs()))
+      .then(() => showToast('Client logs copied.'))
+      .catch((error: unknown) => showToast(`Error: ${errorMessage(error)}`));
+  });
+  wrapInput.addEventListener('change', () => {
+    output.classList.toggle('ks-log-nowrap', !wrapInput.checked);
+  });
+
+  render();
+  container.append(toolbar, output);
+  return subscribeClientLogs(render);
+};
+
+const buildServerLogs = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Server Logs'),
+    paragraph(
+      'Official Devvit logs stream through the CLI. This tab also tails this app\u2019s captured server console output.'
+    )
+  );
+
+  const command = el('pre', 'ks-output ks-log-command');
+  command.textContent = `devvit logs ${context.subredditName} ${context.appSlug} --since 15m --verbose`;
+
+  const toolbar = el('div', 'ks-log-toolbar');
+  const limitLabel = el('label', 'ks-log-limit');
+  const limitText = el('span');
+  limitText.textContent = 'Current trailing limit: loading';
+  const limitInput = document.createElement('input');
+  limitInput.type = 'number';
+  limitInput.min = '1';
+  limitInput.max = '5000';
+  limitInput.step = '1';
+  limitInput.value = '500';
+  limitLabel.append(limitText, limitInput);
+
+  const applyButton = el('button', 'ks-button');
+  applyButton.textContent = 'Apply';
+  const refreshButton = el('button', 'ks-button');
+  refreshButton.textContent = 'Refresh';
+  const clearButton = el('button', 'ks-button');
+  clearButton.textContent = 'Clear';
+  toolbar.append(limitLabel, applyButton, refreshButton, clearButton);
+
+  const status = el('p', 'ks-status');
+  status.textContent = 'Loading server logs...';
+  const output = el('pre', 'ks-output ks-log-output');
+  output.textContent = 'Loading...';
+
+  container.append(command, toolbar, status, output);
+
+  let active = true;
+
+  const setBusy = (busy: boolean) => {
+    applyButton.disabled = busy;
+    refreshButton.disabled = busy;
+    clearButton.disabled = busy;
+  };
+
+  const renderLogs = (result: { limit: number; logs: LogEntry[] }) => {
+    limitText.textContent = `Current trailing limit: ${result.limit}`;
+    limitInput.value = String(result.limit);
+    output.classList.remove('ks-output-error');
+    output.textContent = formatLogEntries(result.logs);
+    status.textContent = `${result.logs.length} server log(s) loaded.`;
+  };
+
+  const refresh = async () => {
+    try {
+      const result = await trpc.logs.listServerLogs.query();
+      if (active) renderLogs(result);
+    } catch (error) {
+      if (!active) return;
+      output.classList.add('ks-output-error');
+      output.textContent = `Error: ${errorMessage(error)}`;
+      status.textContent = 'Failed to load server logs.';
+    }
+  };
+
+  applyButton.addEventListener('click', () => {
+    void (async () => {
+      setBusy(true);
+      try {
+        const limit = Number(limitInput.value);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 5000)
+          throw new Error('Limit must be an integer from 1 to 5000.');
+        await trpc.logs.setServerLogLimit.mutate({ limit });
+        await refresh();
+        showToast('Server log limit updated.');
+      } catch (error) {
+        showToast(`Error: ${errorMessage(error)}`);
+      } finally {
+        setBusy(false);
+      }
+    })();
+  });
+
+  refreshButton.addEventListener('click', () => {
+    void refresh();
+  });
+
+  clearButton.addEventListener('click', () => {
+    void (async () => {
+      setBusy(true);
+      try {
+        await trpc.logs.clearServerLogs.mutate();
+        await refresh();
+        showToast('Server logs cleared.');
+      } catch (error) {
+        showToast(`Error: ${errorMessage(error)}`);
+      } finally {
+        setBusy(false);
+      }
+    })();
+  });
+
+  void refresh();
+  const interval = window.setInterval(() => {
+    void refresh();
+  }, 5000);
+
+  return () => {
+    active = false;
+    window.clearInterval(interval);
+  };
+};
+
 const buildDevvitEvents = (container: HTMLElement) => {
   container.append(
     sectionHeading('Devvit Events'),
@@ -1002,6 +1172,8 @@ export const categories: Category[] = [
   { id: 'hono', label: 'Hono Lab', build: buildHonoLab },
   { id: 'dashboard', label: 'Dashboard', build: buildDashboard },
   { id: 'client', label: 'Client Effects', build: buildClientEffects },
+  { id: 'client-logs', label: 'Client Logs', build: buildClientLogs },
+  { id: 'server-logs', label: 'Server Logs', build: buildServerLogs },
   { id: 'rendering', label: 'Rendering Demo', build: buildRendering },
   { id: 'smooth-movement', label: 'Smooth Movement', build: buildSmoothMovement },
   { id: 'shared-canvas', label: 'Shared Canvas', build: buildSharedCanvas },
