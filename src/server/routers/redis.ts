@@ -102,6 +102,10 @@ export const redisRouter = router({
       // by: 'rank', reverse: true -> highest score first.
       return await redis.zRange(key, 0, 9, { by: 'rank', reverse: true });
     }),
+    all: publicProcedure.query(async () => {
+      const key = `leaderboard:${requirePostId()}`;
+      return await redis.zRange(key, 0, -1, { by: 'rank', reverse: true });
+    }),
     addPoints: publicProcedure
       .input(z.object({ points: z.number().int().min(1).max(100) }))
       .mutation(async ({ input }) => {
@@ -109,6 +113,24 @@ export const redisRouter = router({
         const score = await redis.zIncrBy(key, requireUsername(), input.points);
         return { username: requireUsername(), score };
       }),
+    mine: router({
+      get: publicProcedure.query(async () => {
+        const key = `leaderboard:${requirePostId()}`;
+        const username = requireUsername();
+        return {
+          username,
+          score: (await redis.zScore(key, username)) ?? null,
+        };
+      }),
+      set: publicProcedure
+        .input(z.object({ score: z.number().int().nonnegative().safe() }))
+        .mutation(async ({ input }) => {
+          const key = `leaderboard:${requirePostId()}`;
+          const username = requireUsername();
+          await redis.zAdd(key, { member: username, score: input.score });
+          return { username, score: input.score };
+        }),
+    }),
   }),
 
   // Expiry: redis.set(..., { expiration }) + redis.expireTime - a value that self-destructs.

@@ -436,6 +436,136 @@ const buildRedis = (container: HTMLElement) => {
   );
 };
 
+const buildLeaderboard = (container: HTMLElement) => {
+  let active = true;
+  let refreshTimer: number | undefined;
+
+  const toolbar = el('div', 'ks-log-toolbar');
+  const refreshButton = el('button', 'ks-button');
+  refreshButton.textContent = 'Refresh';
+  toolbar.append(refreshButton);
+
+  const status = el('p', 'ks-status');
+  status.textContent = 'Loading leaderboard...';
+
+  const table = el('table', 'ks-score-table');
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  for (const text of ['Rank', 'User', 'Score']) {
+    const th = document.createElement('th');
+    th.textContent = text;
+    headerRow.append(th);
+  }
+  thead.append(headerRow);
+  const tbody = document.createElement('tbody');
+  table.append(thead, tbody);
+
+  const refresh = async (showErrorToast: boolean) => {
+    refreshButton.disabled = true;
+    try {
+      const scores = await trpc.redis.leaderboard.all.query();
+      if (!active) return;
+      tbody.innerHTML = '';
+      if (!scores.length) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 3;
+        cell.textContent = 'No scores yet.';
+        row.append(cell);
+        tbody.append(row);
+      }
+      scores.forEach(({ member, score }, index) => {
+        const row = document.createElement('tr');
+        for (const text of [String(index + 1), member, String(score)]) {
+          const cell = document.createElement('td');
+          cell.textContent = text;
+          row.append(cell);
+        }
+        tbody.append(row);
+      });
+      status.classList.remove('ks-output-error');
+      status.textContent = `${scores.length} score(s) loaded.`;
+    } catch (error) {
+      if (!active) return;
+      if (showErrorToast) {
+        status.classList.add('ks-output-error');
+        status.textContent = `Error: ${errorMessage(error)}`;
+        showToast(`Error: ${errorMessage(error)}`);
+      } else {
+        console.warn('Automatic leaderboard refresh failed:', error);
+      }
+    } finally {
+      if (active) refreshButton.disabled = false;
+    }
+  };
+
+  const queueRefresh = () => {
+    window.clearTimeout(refreshTimer);
+    refreshTimer = window.setTimeout(() => {
+      refreshTimer = undefined;
+      void refresh(false);
+    }, 250);
+  };
+
+  const queueRefreshWhenVisible = () => {
+    if (document.visibilityState === 'visible') queueRefresh();
+  };
+
+  refreshButton.addEventListener('click', () => {
+    void refresh(true);
+  });
+  document.addEventListener('visibilitychange', queueRefreshWhenVisible);
+  window.addEventListener('focus', queueRefresh);
+  window.addEventListener('pageshow', queueRefresh);
+
+  container.append(
+    sectionHeading('Leaderboard'),
+    paragraph('All stored scores for this post, highest first.'),
+    toolbar,
+    status,
+    table,
+    exampleRow({
+      title: 'All scores JSON',
+      description: 'Debug view of the raw leaderboard response.',
+      buttonLabel: 'Refresh JSON',
+      run: () => trpc.redis.leaderboard.all.query(),
+    })
+  );
+
+  void refresh(false);
+
+  return () => {
+    active = false;
+    window.clearTimeout(refreshTimer);
+    document.removeEventListener('visibilitychange', queueRefreshWhenVisible);
+    window.removeEventListener('focus', queueRefresh);
+    window.removeEventListener('pageshow', queueRefresh);
+  };
+};
+
+const buildMyHighScore = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('My High Score'),
+    paragraph('Get or overwrite your score in this post leaderboard.'),
+    exampleRow({
+      title: 'Get my score',
+      description: 'Read the current logged-in player score.',
+      buttonLabel: 'Read',
+      run: () => trpc.redis.leaderboard.mine.get.query(),
+    }),
+    exampleRow({
+      title: 'Set my score',
+      description: 'Overwrite the current logged-in player score.',
+      buttonLabel: 'Set',
+      inputs: [{ id: 'score', label: 'score', type: 'number', defaultValue: '0' }],
+      run: (values) =>
+        trpc.redis.leaderboard.mine.set.mutate({
+          score: Number(values('score')),
+        }),
+    })
+  );
+};
+
 const buildRedisDebug = (container: HTMLElement) => {
   container.append(
     sectionHeading('Redis Debug'),
@@ -1161,6 +1291,8 @@ const buildSharedCanvas = (container: HTMLElement) => {
 export const categories: Category[] = [
   { id: 'reddit', label: 'Reddit API', build: buildReddit },
   { id: 'redis', label: 'Redis', build: buildRedis },
+  { id: 'leaderboard', label: 'Leaderboard', build: buildLeaderboard },
+  { id: 'my-high-score', label: 'My High Score', build: buildMyHighScore },
   { id: 'redis-debug', label: 'Redis Debug', build: buildRedisDebug },
   { id: 'realtime', label: 'Realtime', build: buildRealtime },
   { id: 'media', label: 'Media', build: buildMedia },
