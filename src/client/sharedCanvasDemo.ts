@@ -61,7 +61,6 @@ class SharedCanvasScene extends Phaser.Scene {
   paintedThisDrag = new Set<string>();
   draft: DraftText | undefined;
   unsubscribeRealtime: (() => void) | undefined;
-  snapshotTimer: number | undefined;
   lastEraseAt = 0;
   active = false;
 
@@ -94,10 +93,24 @@ class SharedCanvasScene extends Phaser.Scene {
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    window.addEventListener('focus', this.handleFocus);
+    window.addEventListener('pageshow', this.handlePageShow);
+
     void this.loadSnapshot();
-    // ponytail: short polling fallback; remove when Devvit realtime canvas events are reliable.
-    this.snapshotTimer = window.setInterval(() => void this.loadSnapshot(false), 1500);
   }
+
+  handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') void this.loadSnapshot(false);
+  };
+
+  handleFocus = () => {
+    void this.loadSnapshot(false);
+  };
+
+  handlePageShow = () => {
+    void this.loadSnapshot(false);
+  };
 
   drawGrid() {
     const graphics = this.add.graphics();
@@ -367,7 +380,12 @@ class SharedCanvasScene extends Phaser.Scene {
   cleanup() {
     this.active = false;
     this.unsubscribeRealtime?.();
-    if (this.snapshotTimer !== undefined) window.clearInterval(this.snapshotTimer);
+    document.removeEventListener(
+      'visibilitychange',
+      this.handleVisibilityChange
+    );
+    window.removeEventListener('focus', this.handleFocus);
+    window.removeEventListener('pageshow', this.handlePageShow);
     this.cancelDraft();
     for (const { object } of this.items.values()) {
       object.destroy();
