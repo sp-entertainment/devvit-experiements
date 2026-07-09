@@ -9,30 +9,22 @@ import {
   BALL_WORLD_HEIGHT,
   BALL_WORLD_WIDTH,
   type BallPoint,
-  type BallState,
   type RealtimeBallMoveMessage,
 } from '../shared/realtime';
 
 const BALL_RADIUS = 18;
 const AUTO_MOVE_DELAY_MS = 650;
-const CLIENT_ID_KEY = 'smooth-movement-client-id';
+const SNAPSHOT_DELAY_MS = 1_000;
 
 type BallView = {
   dot: Phaser.GameObjects.Arc;
   ring: Phaser.GameObjects.Arc;
   label: Phaser.GameObjects.Text;
+  username: string;
+  color: string;
   lastSeq: number;
   lastSeenAt: number;
   tween: Phaser.Tweens.Tween | undefined;
-};
-
-const getClientId = () => {
-  const existing = sessionStorage.getItem(CLIENT_ID_KEY);
-  if (existing) return existing;
-
-  const generated = crypto.randomUUID();
-  sessionStorage.setItem(CLIENT_ID_KEY, generated);
-  return generated;
 };
 
 const clampPoint = (point: BallPoint): BallPoint => ({
@@ -58,35 +50,28 @@ const colorNumber = (color: string) => {
   return Number.isFinite(parsed) ? parsed : 0x38bdf8;
 };
 
-const messageFromState = (ball: BallState): RealtimeBallMoveMessage => ({
-  type: 'ballMove',
-  clientId: ball.clientId,
-  username: ball.username,
-  color: ball.color,
-  from: { x: ball.x, y: ball.y },
-  to: { x: ball.x, y: ball.y },
-  durationMs: 0,
-  seq: ball.seq,
-  sentAt: ball.updatedAt,
-});
-
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 class SmoothMovementScene extends Phaser.Scene {
-  clientId = getClientId();
+  playerId: string | undefined;
   balls = new Map<string, BallView>();
   localMoving = false;
+  moveInFlight = false;
+  joinInFlight = false;
   joined = false;
+  active = false;
   unsubscribeRealtime: (() => void) | undefined;
   autoMoveTimer: Phaser.Time.TimerEvent | undefined;
-  statusText: Phaser.GameObjects.Text;
+  snapshotTimer: Phaser.Time.TimerEvent | undefined;
+  statusText!: Phaser.GameObjects.Text;
 
   constructor() {
     super('SmoothMovementScene');
   }
 
   create() {
+    this.active = true;
     this.cameras.main.setBackgroundColor(0x101624);
     this.drawBackdrop();
 
@@ -100,7 +85,7 @@ class SmoothMovementScene extends Phaser.Scene {
       .text(
         BALL_WORLD_WIDTH - 20,
         18,
-        'Click or tap while your ringed ball is idle.',
+        'Server accepts moves, then every client tweens the result.',
         {
           fontFamily: 'Arial',
           fontSize: 16,
@@ -110,32 +95,37 @@ class SmoothMovementScene extends Phaser.Scene {
       .setOrigin(1, 0);
 
     this.unsubscribeRealtime = onBallMoveMessage((message) => {
-      this.applyMove(message);
+      if (this.active) this.applyMove(message);
     });
 
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      if (!this.joined || this.localMoving) return;
+      if (!this.joined || this.localMoving || this.moveInFlight) return;
       this.autoMoveTimer?.remove(false);
       void this.requestMove(clampPoint({ x: pointer.worldX, y: pointer.worldY }));
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    window.addEventListener('pageshow', this.handlePageShow);
 
     void this.join();
   }
 
+  handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') void this.join();
+  };
+
+  handlePageShow = () => {
+    void this.join();
+  };
+
   override update() {
+    if (!this.active) return;
+
     const now = Date.now();
-    for (const [clientId, ball] of this.balls) {
-      if (
-        clientId !== this.clientId &&
-        now - ball.lastSeenAt > BALL_STALE_MS
-      ) {
-        ball.tween?.stop();
-        ball.dot.destroy();
-        ball.ring.destroy();
-        ball.label.destroy();
-        this.balls.delete(clientId);
+    for (const [playerId, ball] of this.balls) {
+      if (playerId !== this.playerId && now - ball.lastSeenAt > BALL_STALE_MS) {
+        this.destroyBall(playerId, ball);
       }
     }
   }
@@ -157,55 +147,91 @@ class SmoothMovementScene extends Phaser.Scene {
     );
   }
 
+  setStatus(text: string) {
+    if (this.active) this.statusText.setText(text);
+  }
+
   async join() {
+    if (this.joinInFlight) return;
+
+    this.joinInFlight = true;
     try {
-      const snapshot = await trpc.realtime.joinBall.mutate({
-        clientId: this.clientId,
-      });
-      for (const ball of snapshot.balls) {
-        this.applyMove(messageFromState(ball));
-      }
+      const snapshot = await trpc.realtime.joinBall.mutate();
+      if (!this.active) return;
+
+      this.playerId = snapshot.selfPlayerId;
+      for (const move of snapshot.moves) this.applyMove(move);
       this.joined = true;
-      this.statusText.setText('Connected. Auto movement is running.');
+      this.setStatus('Connected. Server-authoritative movement is running.');
+      this.scheduleSnapshot();
       this.scheduleAutoMove();
     } catch (error) {
+      if (!this.active) return;
+
       const message = errorMessage(error);
-      this.statusText.setText(`Unable to join: ${message}`);
+      this.setStatus(`Unable to join: ${message}`);
       showToast(`Unable to join movement demo: ${message}`);
+    } finally {
+      if (this.active) this.joinInFlight = false;
     }
   }
 
   async requestMove(to: BallPoint) {
-    this.localMoving = true;
-    this.statusText.setText('Moving...');
+    if (this.moveInFlight) return;
+
+    this.moveInFlight = true;
+    this.setStatus('Requesting move...');
     try {
-      const message = await trpc.realtime.moveBall.mutate({
-        clientId: this.clientId,
-        to,
-      });
+      const message = await trpc.realtime.moveBall.mutate({ to });
+      if (!this.active) return;
+
       this.applyMove(message);
     } catch (error) {
+      if (!this.active) return;
+
       const message = errorMessage(error);
       this.localMoving = false;
-      this.statusText.setText(`Move failed: ${message}`);
+      this.setStatus(`Move failed: ${message}`);
       showToast(`Move failed: ${message}`);
-      this.scheduleAutoMove();
+    } finally {
+      if (this.active) {
+        this.moveInFlight = false;
+        if (!this.localMoving) {
+          this.setStatus('Connected. Server-authoritative movement is running.');
+          this.scheduleAutoMove();
+        }
+      }
     }
   }
 
+  finishLocalMove() {
+    this.localMoving = false;
+    this.setStatus('Connected. Server-authoritative movement is running.');
+    if (!this.moveInFlight) this.scheduleAutoMove();
+  }
+
   applyMove(message: RealtimeBallMoveMessage) {
-    const isLocal = message.clientId === this.clientId;
-    let ball = this.balls.get(message.clientId);
+    if (!this.active) return;
+
+    const isLocal = message.playerId === this.playerId;
+    let ball = this.balls.get(message.playerId);
     if (!ball) {
       ball = this.createBall(message);
-      this.balls.set(message.clientId, ball);
+      this.balls.set(message.playerId, ball);
     }
 
-    if (message.seq <= ball.lastSeq) return;
+    if (message.seq < ball.lastSeq) return;
+
+    ball.lastSeenAt = Date.now();
+    ball.username = message.username;
+    ball.color = message.color;
+    ball.label.setText(message.username);
+    ball.ring.setVisible(isLocal);
+    ball.label.setColor(isLocal ? '#ffffff' : '#cbd5e1');
+
+    if (message.seq === ball.lastSeq) return;
 
     ball.lastSeq = message.seq;
-    ball.lastSeenAt = Date.now();
-    ball.label.setText(message.username);
     ball.tween?.stop();
 
     const setPosition = (x: number, y: number) => {
@@ -218,8 +244,11 @@ class SmoothMovementScene extends Phaser.Scene {
 
     if (message.durationMs === 0) {
       setPosition(message.to.x, message.to.y);
+      if (isLocal) this.finishLocalMove();
       return;
     }
+
+    if (isLocal) this.localMoving = true;
 
     ball.tween = this.tweens.add({
       targets: ball.dot,
@@ -228,22 +257,20 @@ class SmoothMovementScene extends Phaser.Scene {
       duration: message.durationMs,
       ease: 'Sine.easeInOut',
       onUpdate: () => {
-        setPosition(ball.dot.x, ball.dot.y);
+        if (this.active) setPosition(ball.dot.x, ball.dot.y);
       },
       onComplete: () => {
+        if (!this.active) return;
+
         setPosition(message.to.x, message.to.y);
         ball.tween = undefined;
-        if (isLocal) {
-          this.localMoving = false;
-          this.statusText.setText('Connected. Auto movement is running.');
-          this.scheduleAutoMove();
-        }
+        if (isLocal) this.finishLocalMove();
       },
     });
   }
 
   createBall(message: RealtimeBallMoveMessage): BallView {
-    const isLocal = message.clientId === this.clientId;
+    const isLocal = message.playerId === this.playerId;
     const dot = this.add.circle(
       message.from.x,
       message.from.y,
@@ -273,24 +300,73 @@ class SmoothMovementScene extends Phaser.Scene {
       dot,
       ring,
       label,
+      username: message.username,
+      color: message.color,
       lastSeq: -1,
       lastSeenAt: Date.now(),
       tween: undefined,
     };
   }
 
+  destroyBall(playerId: string, ball: BallView) {
+    ball.tween?.stop();
+    ball.dot.destroy();
+    ball.ring.destroy();
+    ball.label.destroy();
+    this.balls.delete(playerId);
+  }
+
   scheduleAutoMove() {
     this.autoMoveTimer?.remove(false);
     this.autoMoveTimer = this.time.delayedCall(AUTO_MOVE_DELAY_MS, () => {
-      if (!this.joined || this.localMoving) return;
+      if (!this.joined || this.localMoving || this.moveInFlight) return;
       void this.requestMove(randomPoint());
     });
   }
 
+  scheduleSnapshot() {
+    this.snapshotTimer?.remove(false);
+    this.snapshotTimer = this.time.addEvent({
+      delay: SNAPSHOT_DELAY_MS,
+      loop: true,
+      callback: () => {
+        void this.refreshSnapshot();
+      },
+    });
+  }
+
+  async refreshSnapshot() {
+    try {
+      const snapshot = await trpc.realtime.ballSnapshot.query();
+      if (!this.active) return;
+
+      const activePlayerIds = new Set(
+        snapshot.moves.map((move) => move.playerId)
+      );
+      for (const [playerId, ball] of this.balls) {
+        if (playerId !== this.playerId && !activePlayerIds.has(playerId)) {
+          this.destroyBall(playerId, ball);
+        }
+      }
+      for (const move of snapshot.moves) this.applyMove(move);
+    } catch (error) {
+      if (this.active) console.error('Failed to refresh movement snapshot:', error);
+    }
+  }
+
   cleanup() {
+    this.active = false;
     this.unsubscribeRealtime?.();
+    document.removeEventListener(
+      'visibilitychange',
+      this.handleVisibilityChange
+    );
+    window.removeEventListener('pageshow', this.handlePageShow);
     this.autoMoveTimer?.remove(false);
-    this.balls.clear();
+    this.snapshotTimer?.remove(false);
+    for (const [playerId, ball] of [...this.balls]) {
+      this.destroyBall(playerId, ball);
+    }
   }
 }
 

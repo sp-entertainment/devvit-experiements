@@ -842,7 +842,7 @@ const buildSmoothMovement = (container: HTMLElement) => {
   container.append(
     sectionHeading('Smooth Movement (Realtime + Phaser)'),
     paragraph(
-      'Each tab owns one colored ball. Redis stores the authoritative positions, Realtime broadcasts point-to-point moves, and Phaser tweens the render.'
+      'Each Reddit user owns one colored ball. Redis stores the authoritative positions, Realtime broadcasts point-to-point moves, and Phaser tweens the render.'
     )
   );
 

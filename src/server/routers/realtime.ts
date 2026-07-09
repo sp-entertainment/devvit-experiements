@@ -5,7 +5,6 @@ import { router, publicProcedure } from '../trpc';
 import {
   BALL_MARGIN,
   BALL_MOVE_MAX_DURATION_MS,
-  BALL_MOVE_MIN_DURATION_MS,
   BALL_STALE_MS,
   BALL_WORLD_HEIGHT,
   BALL_WORLD_WIDTH,
@@ -19,6 +18,10 @@ import {
   CANVAS_WORLD_HEIGHT,
   CANVAS_WORLD_WIDTH,
   canvasRealtimeChannel,
+  ballMoveMessageFromState,
+  ballMovementDuration,
+  sharedCanvasKey,
+  smoothMovementBallsKey,
   type BallState,
   type CanvasItem,
   type RealtimeBallMoveMessage,
@@ -27,13 +30,20 @@ import {
   type RealtimeCursorMessage,
 } from '../../shared/realtime';
 
+const ballPointSchema = z.object({
+  x: z.number().min(BALL_MARGIN).max(BALL_WORLD_WIDTH - BALL_MARGIN),
+  y: z.number().min(BALL_MARGIN).max(BALL_WORLD_HEIGHT - BALL_MARGIN),
+});
+
 const ballStateSchema = z.object({
-  clientId: z.string(),
+  playerId: z.string(),
   userId: z.string(),
   username: z.string(),
   color: z.string(),
-  x: z.number(),
-  y: z.number(),
+  from: ballPointSchema,
+  to: ballPointSchema,
+  durationMs: z.number().int().min(0).max(BALL_MOVE_MAX_DURATION_MS),
+  moveStartedAt: z.number().int(),
   seq: z.number().int(),
   updatedAt: z.number().int(),
 });
@@ -70,17 +80,6 @@ const canvasItemSchema = z.discriminatedUnion('kind', [
   canvasTextItemSchema,
 ]);
 
-const ballPointSchema = z.object({
-  x: z.number().min(BALL_MARGIN).max(BALL_WORLD_WIDTH - BALL_MARGIN),
-  y: z.number().min(BALL_MARGIN).max(BALL_WORLD_HEIGHT - BALL_MARGIN),
-});
-
-const clientIdSchema = z
-  .string()
-  .min(8)
-  .max(64)
-  .regex(/^[a-zA-Z0-9_-]+$/);
-
 const requirePostId = () => {
   if (!context.postId)
     throw new Error('postId is required but missing from context');
@@ -89,11 +88,12 @@ const requirePostId = () => {
 
 const requireUser = () => {
   if (!context.userId || !context.username) throw new Error('Must be logged in');
-  return { userId: context.userId, username: context.username };
+  return {
+    playerId: context.userId,
+    userId: context.userId,
+    username: context.username,
+  };
 };
-
-const ballsKey = (postId: string) => `balls:${postId}`;
-const canvasKey = (postId: string) => `canvas:${postId}`;
 
 const randomPoint = () => ({
   x:
@@ -119,8 +119,57 @@ const randomColor = () => {
   return colors[index] ?? '#38bdf8';
 };
 
-const parseBallState = (value: string): BallState =>
-  ballStateSchema.parse(JSON.parse(value));
+const createBall = (
+  playerId: string,
+  userId: string,
+  username: string,
+  now: number
+): BallState => {
+  const point = randomPoint();
+  return {
+    playerId,
+    userId,
+    username,
+    color: randomColor(),
+    from: point,
+    to: point,
+    durationMs: 0,
+    moveStartedAt: now,
+    seq: now,
+    updatedAt: now,
+  };
+};
+
+const parseBallState = (value: string): BallState => {
+  const parsed = JSON.parse(value);
+  return ballStateSchema.parse(parsed);
+};
+
+const writeBallState = async (
+  key: string,
+  playerId: string,
+  getNext: (current: BallState | undefined) => BallState
+) => {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const txn = await redis.watch(key);
+    const raw = await redis.hGet(key, playerId);
+    let next: BallState;
+
+    try {
+      next = getNext(raw ? parseBallState(raw) : undefined);
+    } catch (error) {
+      await txn.unwatch();
+      throw error;
+    }
+
+    await txn.multi();
+    await txn.hSet(key, { [playerId]: JSON.stringify(next) });
+    const result = await txn.exec();
+    if (result.length > 0) return next;
+  }
+
+  throw new Error('Movement update conflicted; retry');
+};
 
 const parseCanvasItem = (value: string): CanvasItem =>
   canvasItemSchema.parse(JSON.parse(value));
@@ -131,38 +180,33 @@ const readActiveBalls = async (
 ): Promise<BallState[]> => {
   const stored = await redis.hGetAll(key);
   const balls: BallState[] = [];
-  const staleClientIds: string[] = [];
+  const stalePlayerIds: string[] = [];
 
-  for (const [clientId, value] of Object.entries(stored)) {
+  for (const [playerId, value] of Object.entries(stored)) {
     try {
       const ball = parseBallState(value);
-      if (now - ball.updatedAt > BALL_STALE_MS) {
-        staleClientIds.push(clientId);
+      if (ball.playerId !== playerId || now - ball.updatedAt > BALL_STALE_MS) {
+        stalePlayerIds.push(playerId);
       } else {
         balls.push(ball);
       }
     } catch {
-      staleClientIds.push(clientId);
+      stalePlayerIds.push(playerId);
     }
   }
 
-  if (staleClientIds.length) await redis.hDel(key, staleClientIds);
+  if (stalePlayerIds.length) await redis.hDel(key, stalePlayerIds);
   return balls;
 };
 
-const movementDuration = (
-  from: { x: number; y: number },
-  to: { x: number; y: number }
-) =>
-  Math.round(
-    Math.min(
-      BALL_MOVE_MAX_DURATION_MS,
-      Math.max(
-        BALL_MOVE_MIN_DURATION_MS,
-        Math.hypot(to.x - from.x, to.y - from.y) * 2.2
-      )
-    )
-  );
+const sendBallMove = async (
+  postId: string,
+  message: RealtimeBallMoveMessage
+) => {
+  await realtime.send<RealtimeBallMoveMessage>(postId, message).catch((error) => {
+    console.error('Failed to broadcast ball move:', error);
+  });
+};
 
 const readCanvasItems = async (key: string): Promise<CanvasItem[]> => {
   const stored = await redis.hGetAll(key);
@@ -244,90 +288,77 @@ export const realtimeRouter = router({
       return { success: true };
     }),
 
-  joinBall: publicProcedure
-    .input(z.object({ clientId: clientIdSchema }))
-    .mutation(async ({ input }) => {
-      const postId = requirePostId();
-      const { userId, username } = requireUser();
-      const key = ballsKey(postId);
-      const now = Date.now();
-      const balls = await readActiveBalls(key, now);
-      const existing = balls.find((ball) => ball.clientId === input.clientId);
+  joinBall: publicProcedure.mutation(async () => {
+    const postId = requirePostId();
+    const { playerId, userId, username } = requireUser();
+    const key = smoothMovementBallsKey(postId);
+    const now = Date.now();
 
-      if (existing && existing.userId !== userId) {
-        throw new Error('This ball belongs to a different user');
-      }
+    const self = await writeBallState(key, playerId, (current) => ({
+      ...(current ?? createBall(playerId, userId, username, now)),
+      username,
+      updatedAt: now,
+    }));
+    const activeBalls = await readActiveBalls(key, now);
 
-      const self =
-        existing ??
-        ({
-          clientId: input.clientId,
-          userId,
-          username,
-          color: randomColor(),
-          ...randomPoint(),
-          seq: 0,
-          updatedAt: now,
-        } satisfies BallState);
+    await sendBallMove(postId, ballMoveMessageFromState(self, now));
 
-      const updatedSelf = { ...self, username, updatedAt: now };
-      await redis.hSet(key, { [input.clientId]: JSON.stringify(updatedSelf) });
-
-      const activeBalls = existing
-        ? balls.map((ball) =>
-            ball.clientId === input.clientId ? updatedSelf : ball
-          )
-        : [...balls, updatedSelf];
-
-      return { self: updatedSelf, balls: activeBalls };
-    }),
+    return {
+      selfPlayerId: playerId,
+      moves: activeBalls.map((ball) => ballMoveMessageFromState(ball, now)),
+    };
+  }),
 
   moveBall: publicProcedure
-    .input(z.object({ clientId: clientIdSchema, to: ballPointSchema }))
+    .input(z.object({ to: ballPointSchema }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
-      const { userId, username } = requireUser();
-      const key = ballsKey(postId);
-      const raw = await redis.hGet(key, input.clientId);
-      if (!raw) throw new Error('Join the movement demo before moving');
-
-      const ball = parseBallState(raw);
-      if (ball.userId !== userId) {
-        throw new Error('This ball belongs to a different user');
-      }
-
+      const { playerId, userId, username } = requireUser();
+      const key = smoothMovementBallsKey(postId);
       const now = Date.now();
-      const from = { x: ball.x, y: ball.y };
       const to = { x: Math.round(input.to.x), y: Math.round(input.to.y) };
-      const seq = ball.seq + 1;
-      const next: BallState = {
-        ...ball,
-        username,
-        x: to.x,
-        y: to.y,
-        seq,
-        updatedAt: now,
-      };
-      const message: RealtimeBallMoveMessage = {
-        type: 'ballMove',
-        clientId: input.clientId,
-        username,
-        color: ball.color,
-        from,
-        to,
-        durationMs: movementDuration(from, to),
-        seq,
-        sentAt: now,
-      };
 
-      await redis.hSet(key, { [input.clientId]: JSON.stringify(next) });
-      await realtime.send<RealtimeBallMoveMessage>(postId, message);
+      const next = await writeBallState(key, playerId, (current) => {
+        const ball = current ?? createBall(playerId, userId, username, now);
+        const from = ballMoveMessageFromState(ball, now).from;
+        const stillMoving =
+          ball.durationMs > 0 && now - ball.moveStartedAt < ball.durationMs;
+
+        if (stillMoving) {
+          throw new Error('Wait for the current move to finish');
+        }
+
+        return {
+          ...ball,
+          username,
+          from,
+          to,
+          durationMs: ballMovementDuration(from, to),
+          moveStartedAt: now,
+          seq: ball.seq + 1,
+          updatedAt: now,
+        };
+      });
+      const message = ballMoveMessageFromState(next, now);
+
+      await sendBallMove(postId, message);
       return message;
     }),
 
+  ballSnapshot: publicProcedure.query(async () => {
+    const now = Date.now();
+    const balls = await readActiveBalls(
+      smoothMovementBallsKey(requirePostId()),
+      now
+    );
+    return {
+      moves: balls.map((ball) => ballMoveMessageFromState(ball, now)),
+    };
+  }),
+
   canvas: router({
     snapshot: publicProcedure.query(async () => {
-      return { items: await readCanvasItems(canvasKey(requirePostId())) };
+      return { items: await readCanvasItems(sharedCanvasKey(requirePostId())) };
     }),
 
     putPixel: publicProcedure
@@ -358,7 +389,9 @@ export const realtimeRouter = router({
           sentAt: now,
         };
 
-        await redis.hSet(canvasKey(postId), { [item.id]: JSON.stringify(item) });
+        await redis.hSet(sharedCanvasKey(postId), {
+          [item.id]: JSON.stringify(item),
+        });
         await realtime.send<RealtimeCanvasPutMessage>(
           canvasRealtimeChannel(postId),
           message
@@ -396,7 +429,9 @@ export const realtimeRouter = router({
           sentAt: now,
         };
 
-        await redis.hSet(canvasKey(postId), { [item.id]: JSON.stringify(item) });
+        await redis.hSet(sharedCanvasKey(postId), {
+          [item.id]: JSON.stringify(item),
+        });
         await realtime.send<RealtimeCanvasPutMessage>(
           canvasRealtimeChannel(postId),
           message
@@ -417,7 +452,7 @@ export const realtimeRouter = router({
       )
       .mutation(async ({ input }) => {
         const postId = requirePostId();
-        const key = canvasKey(postId);
+        const key = sharedCanvasKey(postId);
         const items = await readCanvasItems(key);
         const ids = items
           .filter((item) => isWithinErase(item, input, input.radius))

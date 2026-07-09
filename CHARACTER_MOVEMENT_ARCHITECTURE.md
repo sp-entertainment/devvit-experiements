@@ -42,6 +42,8 @@ sequenceDiagram
   discrete action (a step, a door opening, an item pickup) — not a continuous state feed.
 - **Clients** (including the acting player's own client) are dumb renderers: they receive events
   and play the corresponding animation/tween. No client resolves collisions or game rules itself.
+- **Identity is server-derived.** For the Smooth Movement demo, `playerId` is `context.userId`,
+  so one logged-in Reddit user owns one ball. Clients never submit `playerId`/`clientId`.
 
 ## 1. Send motion, not position
 
@@ -50,7 +52,7 @@ Broadcast a **move event** that describes a tween, not a coordinate snapshot:
 ```ts
 type MoveEvent = {
   type: 'move';
-  charId: string;
+  playerId: string;
   from: { x: number; y: number };
   to: { x: number; y: number };
   durationMs: number; // how long the walk animation should take
@@ -62,7 +64,7 @@ Client just runs a tween from `from` to `to` over `durationMs` — no continuous
 
 ```ts
 function onMove(evt: MoveEvent) {
-  const sprite = characters.get(evt.charId);
+  const sprite = characters.get(evt.playerId);
   if (evt.seq <= sprite.lastSeq) return; // drop stale/out-of-order/duplicate events
   sprite.lastSeq = evt.seq;
 
@@ -94,29 +96,34 @@ already happened.
 
 ```ts
 // server (pseudocode)
-async function handleMove(charId: string, dir: Direction) {
-  const state = await getCharacterState(charId); // from Redis
+async function handleMove(dir: Direction) {
+  const playerId = context.userId; // server-derived identity
+  const state = await getCharacterState(playerId); // from Redis
   const to = applyDirection(state.pos, dir);
 
   if (!isWalkable(to) || isOccupied(to)) {
     return { accepted: false };
   }
 
-  const seq = await redis.hIncrBy(`char:${charId}`, 'seq', 1);
-  await redis.hSet(`char:${charId}`, { x: to.x, y: to.y });
+  const seq = await redis.hIncrBy(`char:${playerId}`, 'seq', 1);
+  await redis.hSet(`char:${playerId}`, { x: to.x, y: to.y });
 
   const durationMs = 250; // matches walk-cycle length
   await realtime.send(postId, {
-    type: 'move', charId, from: state.pos, to, durationMs, seq,
+    type: 'move', playerId, from: state.pos, to, durationMs, seq,
   });
 
   return { accepted: true, to, durationMs };
 }
 ```
 
-## 3. Client-side prediction for the local player only
+## 3. Local-player prediction is optional
 
-Round-tripping to the server before animating your *own* character would feel laggy, so:
+For the Smooth Movement demo, the local player does **not** predict. It sends a move request,
+waits for the server response, then runs the same tween path used for remote players. This keeps
+the demo obviously server-authoritative and avoids snap-back edge cases.
+
+For a latency-sensitive game, add prediction only for the local player:
 
 1. On input, immediately start the tween locally (optimistic).
 2. Fire `POST /api/move` in parallel.
@@ -155,14 +162,18 @@ effect. This keeps all game logic server-side; clients are just replaying "thing
 | No documented ordering/delivery guarantees | Tag every event with a monotonic `seq` (per character or global tick); clients drop stale/duplicate/out-of-order events |
 | Chattiness / undocumented rate limits | Batch same-tick updates into one message, e.g. `{ type: 'tick', moves: [...] }`, instead of one `realtime.send` per character |
 | Message arrives very late | Optional: include a server timestamp and shorten the remaining tween duration to "catch up" instead of playing the full animation late |
+| User opens multiple tabs | Use one `playerId` per Reddit user; each tab observes/controls the same authoritative ball |
+| Client sends forged identity | Ignore it: derive `playerId` from `context.userId` on the server |
+| Client route is destroyed while requests are in flight | Scene shutdown sets an inactive flag; async tRPC/realtime callbacks check it before touching Phaser objects |
 
 ## Summary checklist for implementing a new networked character/interaction
 
 - [ ] Model movement as discrete steps (grid/tile) wherever possible, not continuous physics
 - [ ] Server validates every move/action against Redis-backed authoritative state before broadcasting
+- [ ] Server derives the player/character identity from request context, never from client input
 - [ ] Broadcast **commands** (`from`/`to`/`durationMs` or `action`/`target`), never raw per-frame positions
 - [ ] Client renders via Phaser tweens/animations driven entirely by incoming events
-- [ ] Local player: optimistic client-side prediction + server reconciliation
+- [ ] Local player: either wait for server confirmation, or use optimistic prediction with reconciliation
 - [ ] Remote characters/NPCs: no prediction, pure event playback
 - [ ] Every event carries a `seq` for de-dup / stale-event rejection
 - [ ] `GET /api/state` exists for late-joining clients to bootstrap full world state
