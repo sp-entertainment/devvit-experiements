@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { context, redis } from '@devvit/web/server';
 import { router, publicProcedure } from '../trpc';
+import {
+  sharedCanvasKey,
+  smoothMovementBallsKey,
+} from '../../shared/realtime';
 
 const requirePostId = () => {
   if (!context.postId)
@@ -14,6 +18,45 @@ const requireUsername = () => {
 };
 
 export const redisRouter = router({
+  debug: router({
+    clearSmoothMovement: publicProcedure.mutation(async () => {
+      const key = smoothMovementBallsKey(requirePostId());
+      await redis.del(key);
+      return { deleted: [key] };
+    }),
+    clearSharedCanvas: publicProcedure.mutation(async () => {
+      const key = sharedCanvasKey(requirePostId());
+      await redis.del(key);
+      return { deleted: [key] };
+    }),
+    clearRedisExamples: publicProcedure.mutation(async () => {
+      const postId = requirePostId();
+      const keys = [
+        `counter:${postId}`,
+        `profile:${postId}:${requireUsername()}`,
+        `leaderboard:${postId}`,
+        `expiring:${postId}`,
+        `txn-counter:${postId}`,
+      ];
+      await redis.del(...keys);
+      return { deleted: keys };
+    }),
+    clearCurrentPost: publicProcedure.mutation(async () => {
+      const postId = requirePostId();
+      const keys = [
+        smoothMovementBallsKey(postId),
+        sharedCanvasKey(postId),
+        `counter:${postId}`,
+        `profile:${postId}:${requireUsername()}`,
+        `leaderboard:${postId}`,
+        `expiring:${postId}`,
+        `txn-counter:${postId}`,
+      ];
+      await redis.del(...keys);
+      return { deleted: keys };
+    }),
+  }),
+
   // Strings: redis.get / redis.incrBy - the classic per-post counter.
   counter: router({
     get: publicProcedure.query(async () => {

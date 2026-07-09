@@ -417,6 +417,42 @@ const buildRedis = (container: HTMLElement) => {
   );
 };
 
+const buildRedisDebug = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Redis Debug'),
+    paragraph(
+      'Delete known Redis keys for this post. This does not scan or flush the app store.'
+    ),
+    exampleRow({
+      title: 'Clear Smooth Movement',
+      description:
+        'Deletes the current versioned ball-state hash for this post.',
+      buttonLabel: 'Clear balls',
+      run: () => trpc.redis.debug.clearSmoothMovement.mutate(),
+    }),
+    exampleRow({
+      title: 'Clear Shared Canvas',
+      description: 'Deletes the current shared canvas hash for this post.',
+      buttonLabel: 'Clear canvas',
+      run: () => trpc.redis.debug.clearSharedCanvas.mutate(),
+    }),
+    exampleRow({
+      title: 'Clear Redis examples',
+      description:
+        'Deletes the counter, your profile row, leaderboard, expiring value, and transaction counter for this post.',
+      buttonLabel: 'Clear examples',
+      run: () => trpc.redis.debug.clearRedisExamples.mutate(),
+    }),
+    exampleRow({
+      title: 'Clear all known current-post keys',
+      description:
+        'Deletes Smooth Movement, Shared Canvas, and the Redis example keys for this post.',
+      buttonLabel: 'Clear all',
+      run: () => trpc.redis.debug.clearCurrentPost.mutate(),
+    })
+  );
+};
+
 const buildRealtime = (container: HTMLElement) => {
   container.append(
     sectionHeading('Realtime'),
@@ -954,6 +990,7 @@ const buildSharedCanvas = (container: HTMLElement) => {
 export const categories: Category[] = [
   { id: 'reddit', label: 'Reddit API', build: buildReddit },
   { id: 'redis', label: 'Redis', build: buildRedis },
+  { id: 'redis-debug', label: 'Redis Debug', build: buildRedisDebug },
   { id: 'realtime', label: 'Realtime', build: buildRealtime },
   { id: 'media', label: 'Media', build: buildMedia },
   { id: 'notifications', label: 'Notifications', build: buildNotifications },
