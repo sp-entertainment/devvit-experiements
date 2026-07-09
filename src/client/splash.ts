@@ -1,5 +1,11 @@
 import { navigateTo, context, requestExpandedMode } from '@devvit/web/client';
 
+declare const __BUILD_ID__: string;
+
+const version = document.getElementById('app-version');
+if (version)
+  version.textContent = `app v${context.appVersion} | build ${__BUILD_ID__}`;
+
 const docsLink = document.getElementById('docs-link') as HTMLDivElement;
 const playtestLink = document.getElementById('playtest-link') as HTMLDivElement;
 const discordLink = document.getElementById('discord-link') as HTMLDivElement;

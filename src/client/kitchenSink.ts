@@ -1,9 +1,15 @@
-import { showToast } from '@devvit/web/client';
+import { context, showToast } from '@devvit/web/client';
 import { categories } from './kitchenSink/categories';
 import { el, errorMessage } from './kitchenSink/ui';
 import { stopPhaserGame } from './phaserGame';
 import { stopSharedCanvasDemo } from './sharedCanvasDemo';
 import { stopSmoothMovementDemo } from './smoothMovementDemo';
+
+declare const __BUILD_ID__: string;
+
+const version = document.getElementById('app-version');
+if (version)
+  version.textContent = `app v${context.appVersion} | build ${__BUILD_ID__}`;
 
 const root = document.getElementById('kitchen-sink');
 if (!root)
