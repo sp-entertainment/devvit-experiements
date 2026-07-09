@@ -61,6 +61,7 @@ class SharedCanvasScene extends Phaser.Scene {
   draft: DraftText | undefined;
   unsubscribeRealtime: (() => void) | undefined;
   lastEraseAt = 0;
+  active = false;
 
   constructor(controls: SharedCanvasControls) {
     super('SharedCanvasScene');
@@ -68,24 +69,26 @@ class SharedCanvasScene extends Phaser.Scene {
   }
 
   create() {
+    this.active = true;
     this.cameras.main.setBackgroundColor(0x0f1117);
     this.drawGrid();
-    this.controls.setStatus('Loading canvas...');
+    this.setStatus('Loading canvas...');
 
     this.unsubscribeRealtime = onCanvasMessage((message) => {
-      this.applyRealtime(message);
+      if (this.active) this.applyRealtime(message);
     });
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!this.active) return;
       this.paintedThisDrag.clear();
       this.handlePointer(pointer, true);
     });
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.isDown) this.handlePointer(pointer, false);
+      if (this.active && pointer.isDown) this.handlePointer(pointer, false);
     });
     this.input.on('pointerup', () => this.paintedThisDrag.clear());
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
-      this.handleKey(event);
+      if (this.active) this.handleKey(event);
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
@@ -107,14 +110,22 @@ class SharedCanvasScene extends Phaser.Scene {
     }
   }
 
+  setStatus(text: string) {
+    if (this.active) this.controls.setStatus(text);
+  }
+
   async loadSnapshot() {
     try {
       const snapshot = await trpc.realtime.canvas.snapshot.query();
+      if (!this.active) return;
+
       for (const item of snapshot.items) this.applyPut(item);
-      this.controls.setStatus(`Connected. ${snapshot.items.length} marks loaded.`);
+      this.setStatus(`Connected. ${snapshot.items.length} marks loaded.`);
     } catch (error) {
+      if (!this.active) return;
+
       const message = errorMessage(error);
-      this.controls.setStatus(`Canvas load failed: ${message}`);
+      this.setStatus(`Canvas load failed: ${message}`);
       showToast(`Canvas load failed: ${message}`);
     }
   }
@@ -138,6 +149,8 @@ class SharedCanvasScene extends Phaser.Scene {
   }
 
   paintPixel(x: number, y: number) {
+    if (!this.active) return;
+
     const col = clamp(Math.floor(x / CANVAS_CELL_SIZE), 0, CANVAS_GRID_COLS - 1);
     const row = clamp(Math.floor(y / CANVAS_CELL_SIZE), 0, CANVAS_GRID_ROWS - 1);
     const key = `${col}:${row}`;
@@ -151,17 +164,23 @@ class SharedCanvasScene extends Phaser.Scene {
           row,
           color: this.controls.getColor(),
         });
+        if (!this.active) return;
+
         this.applyPut(item);
-        this.controls.setStatus('Pixel shared.');
+        this.setStatus('Pixel shared.');
       } catch (error) {
+        if (!this.active) return;
+
         const message = errorMessage(error);
-        this.controls.setStatus(`Pixel failed: ${message}`);
+        this.setStatus(`Pixel failed: ${message}`);
         showToast(`Pixel failed: ${message}`);
       }
     })();
   }
 
   eraseAt(x: number, y: number) {
+    if (!this.active) return;
+
     const now = Date.now();
     if (now - this.lastEraseAt < 75) return;
     this.lastEraseAt = now;
@@ -173,19 +192,25 @@ class SharedCanvasScene extends Phaser.Scene {
           y: Math.round(y),
           radius: this.controls.getEraserRadius(),
         });
+        if (!this.active) return;
+
         this.applyErase(ids);
-        this.controls.setStatus(
+        this.setStatus(
           ids.length ? `Erased ${ids.length} mark(s).` : 'Nothing to erase.'
         );
       } catch (error) {
+        if (!this.active) return;
+
         const message = errorMessage(error);
-        this.controls.setStatus(`Erase failed: ${message}`);
+        this.setStatus(`Erase failed: ${message}`);
         showToast(`Erase failed: ${message}`);
       }
     })();
   }
 
   startDraft(x: number, y: number) {
+    if (!this.active) return;
+
     this.cancelDraft();
     const color = this.controls.getColor();
     const object = this.add
@@ -200,7 +225,7 @@ class SharedCanvasScene extends Phaser.Scene {
       .setDepth(3);
 
     this.draft = { object, x, y, color, value: '' };
-    this.controls.setStatus('Type, then press Enter to share.');
+    this.setStatus('Type, then press Enter to share.');
   }
 
   handleKey(event: KeyboardEvent) {
@@ -248,14 +273,18 @@ class SharedCanvasScene extends Phaser.Scene {
         text,
         color: draft.color,
       });
+      if (!this.active) return;
+
       this.applyPut(item);
-      this.controls.setStatus('Text shared.');
+      this.setStatus('Text shared.');
     } catch (error) {
+      if (!this.active) return;
+
       const message = errorMessage(error);
-      this.controls.setStatus(`Text failed: ${message}`);
+      this.setStatus(`Text failed: ${message}`);
       showToast(`Text failed: ${message}`);
     } finally {
-      this.cancelDraft();
+      if (this.active) this.cancelDraft();
     }
   }
 
@@ -265,6 +294,8 @@ class SharedCanvasScene extends Phaser.Scene {
   }
 
   applyRealtime(message: RealtimeCanvasMessage) {
+    if (!this.active) return;
+
     if (message.type === 'canvasPut') {
       this.applyPut(message.item);
     } else {
@@ -273,6 +304,8 @@ class SharedCanvasScene extends Phaser.Scene {
   }
 
   applyPut(item: CanvasItem) {
+    if (!this.active) return;
+
     this.items.get(item.id)?.object.destroy();
 
     if (item.kind === 'pixel') {
@@ -305,6 +338,8 @@ class SharedCanvasScene extends Phaser.Scene {
   }
 
   applyErase(ids: string[]) {
+    if (!this.active) return;
+
     for (const id of ids) {
       this.items.get(id)?.object.destroy();
       this.items.delete(id);
@@ -312,8 +347,12 @@ class SharedCanvasScene extends Phaser.Scene {
   }
 
   cleanup() {
+    this.active = false;
     this.unsubscribeRealtime?.();
     this.cancelDraft();
+    for (const { object } of this.items.values()) {
+      object.destroy();
+    }
     this.items.clear();
   }
 }
