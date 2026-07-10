@@ -49,4 +49,8 @@ You are writing a Devvit web application that will be executed on Reddit.com.
 - You may find code that references blocks or `@devvit/public-api` while building a feature. Do NOT use this code as this project is configured to use Devvit web only.
 - Whenever you add an endpoint for a new menu item action, ensure that you've added the corresponding mapping to `devvit.json` so that it is properly registered
 
+## Logging
+
+- Use `trace` for core execution-flow events, `debug` for troubleshooting detail, `info` for normal non-actionable events, `warn` for unexpected events that may delay work, and `error` for component failures that affect other operations. Reserve `fatal` for app-wide unrecoverable failures; add it to logger types before use.
+
 Docs: https://developers.reddit.com/docs/llms.txt.
