@@ -31,7 +31,11 @@ import {
   onCursorConnectionChange,
   onCursorMessage,
 } from '../realtimeChannel';
-import { getClientLogs, subscribeClientLogs } from '../clientLogs';
+import {
+  clearClientLogs,
+  getClientLogs,
+  subscribeClientLogs,
+} from '../clientLogs';
 import {
   CANVAS_COLORS,
   CANVAS_ERASER_MAX_RADIUS,
@@ -914,13 +918,15 @@ const buildClientLogs = (container: HTMLElement) => {
   const toolbar = el('div', 'ks-log-toolbar');
   const copyButton = el('button', 'ks-button');
   copyButton.textContent = 'Copy all';
+  const clearButton = el('button', 'ks-button');
+  clearButton.textContent = 'Clear client logs';
   const wrapLabel = el('label', 'ks-log-toggle');
   const wrapInput = document.createElement('input');
   wrapInput.type = 'checkbox';
   const wrapText = el('span');
   wrapText.textContent = 'Line wrap';
   wrapLabel.append(wrapInput, wrapText);
-  toolbar.append(copyButton, wrapLabel);
+  toolbar.append(copyButton, clearButton, wrapLabel);
 
   const output = el('pre', 'ks-output ks-log-output ks-log-nowrap');
   const render = () => {
@@ -931,7 +937,14 @@ const buildClientLogs = (container: HTMLElement) => {
     void navigator.clipboard
       .writeText(formatLogEntries(getClientLogs()))
       .then(() => showToast('Client logs copied.'))
-      .catch((error: unknown) => showToast(`Error: ${errorMessage(error)}`));
+      .catch((error: unknown) => {
+        console.error('Failed to copy client logs:', error);
+        showToast(`Error: ${errorMessage(error)}`);
+      });
+  });
+  clearButton.addEventListener('click', () => {
+    clearClientLogs();
+    showToast('Client logs cleared.');
   });
   wrapInput.addEventListener('change', () => {
     output.classList.toggle('ks-log-nowrap', !wrapInput.checked);

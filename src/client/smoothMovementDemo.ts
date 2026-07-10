@@ -2,6 +2,7 @@ import { showToast } from '@devvit/web/client';
 import * as Phaser from 'phaser';
 import { AUTO, Game } from 'phaser';
 import { onBallMoveMessage } from './realtimeChannel';
+import { traceClientLog } from './clientLogs';
 import { trpc } from './trpc';
 import {
   BALL_MARGIN,
@@ -155,6 +156,7 @@ class SmoothMovementScene extends Phaser.Scene {
     if (this.joinInFlight) return;
 
     this.joinInFlight = true;
+    traceClientLog('Joining smooth movement demo.');
     try {
       const snapshot = await trpc.realtime.joinBall.mutate();
       if (!this.active) return;
@@ -163,6 +165,7 @@ class SmoothMovementScene extends Phaser.Scene {
       for (const move of snapshot.moves) this.applyMove(move);
       this.joined = true;
       this.setStatus('Connected. Server-authoritative movement is running.');
+      console.info('Joined smooth movement demo.');
       this.scheduleSnapshot();
       this.scheduleAutoMove();
     } catch (error) {
@@ -170,6 +173,7 @@ class SmoothMovementScene extends Phaser.Scene {
 
       const message = errorMessage(error);
       this.setStatus(`Unable to join: ${message}`);
+      console.error('Failed to join smooth movement demo:', error);
       showToast(`Unable to join movement demo: ${message}`);
     } finally {
       if (this.active) this.joinInFlight = false;
@@ -192,6 +196,7 @@ class SmoothMovementScene extends Phaser.Scene {
       const message = errorMessage(error);
       this.localMoving = false;
       this.setStatus(`Move failed: ${message}`);
+      console.error('Failed to request smooth movement:', error);
       showToast(`Move failed: ${message}`);
     } finally {
       if (this.active) {
@@ -385,12 +390,15 @@ const config: Phaser.Types.Core.GameConfig = {
 let currentGame: Game | undefined;
 
 export const startSmoothMovementDemo = (parentId: string): Game => {
+  traceClientLog('Starting smooth movement demo:', parentId);
   currentGame?.destroy(true);
   currentGame = new Game({ ...config, parent: parentId });
+  console.info('Started smooth movement demo:', parentId);
   return currentGame;
 };
 
 export const stopSmoothMovementDemo = (): void => {
+  if (currentGame) traceClientLog('Stopping smooth movement demo.');
   currentGame?.destroy(true);
   currentGame = undefined;
 };

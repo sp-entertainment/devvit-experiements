@@ -3,6 +3,7 @@ import * as Phaser from 'phaser';
 import { context } from '@devvit/web/client';
 import { trpc } from '../trpc';
 import { onCursorMessage } from '../realtimeChannel';
+import { traceClientLog } from '../clientLogs';
 
 export class Game extends Scene {
   camera: Phaser.Cameras.Scene2D.Camera;
@@ -27,6 +28,7 @@ export class Game extends Scene {
   }
 
   create() {
+    traceClientLog('Creating Phaser main game scene.');
     // Configure camera & background
     this.camera = this.cameras.main;
     this.camera.setBackgroundColor(0x222222);
@@ -56,6 +58,7 @@ export class Game extends Scene {
         const { count } = await trpc.redis.counter.get.query();
         this.count = count;
         this.updateCountText();
+        console.info('Loaded Phaser counter:', count);
       } catch (error) {
         console.error('Failed to fetch initial count:', error);
       }
@@ -95,10 +98,12 @@ export class Game extends Scene {
       'Increment',
       '#00ff00',
       async () => {
+        traceClientLog('Incrementing Phaser counter.');
         try {
           const { count } = await trpc.redis.counter.increment.mutate();
           this.count = count;
           this.updateCountText();
+          console.info('Incremented Phaser counter:', count);
         } catch (error) {
           console.error('Failed to increment count:', error);
         }
@@ -111,10 +116,12 @@ export class Game extends Scene {
       'Decrement',
       '#ff5555',
       async () => {
+        traceClientLog('Decrementing Phaser counter.');
         try {
           const { count } = await trpc.redis.counter.decrement.mutate();
           this.count = count;
           this.updateCountText();
+          console.info('Decremented Phaser counter:', count);
         } catch (error) {
           console.error('Failed to decrement count:', error);
         }
@@ -127,6 +134,7 @@ export class Game extends Scene {
       'Game Over',
       '#ffffff',
       () => {
+        traceClientLog('Switching Phaser game to Game Over scene.');
         this.scene.start('GameOver');
       }
     );

@@ -5,6 +5,7 @@ import { MainMenu } from './scenes/MainMenu';
 import * as Phaser from 'phaser';
 import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
+import { traceClientLog } from './clientLogs';
 
 //  Find out more information about the Game Config at:
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
@@ -28,14 +29,17 @@ let currentGame: Game | undefined;
  * calling it again (e.g. re-opening the "Rendering Demo" tab) tears down the
  * previous instance first rather than leaking a second running game loop. */
 export const startPhaserGame = (parentId: string): Game => {
+  traceClientLog('Starting Phaser rendering demo:', parentId);
   currentGame?.destroy(true);
   currentGame = new Game({ ...config, parent: parentId });
+  console.info('Started Phaser rendering demo:', parentId);
   return currentGame;
 };
 
 /** Tears down the running game loop, e.g. when navigating away from the
  * "Rendering Demo" tab so it doesn't keep rendering in the background. */
 export const stopPhaserGame = (): void => {
+  if (currentGame) traceClientLog('Stopping Phaser rendering demo.');
   currentGame?.destroy(true);
   currentGame = undefined;
 };

@@ -3,9 +3,11 @@ import type { LogEntry, LogLevel } from '../shared/logs';
 const maxClientLogs = 500;
 const logs: LogEntry[] = [];
 const listeners = new Set<() => void>();
+const nativeDebug = console.debug.bind(console);
 
 let installed = false;
 let nextId = 0;
+let hasUnclearedClientErrors = false;
 
 const formatPart = (part: unknown): string => {
   if (typeof part === 'string') return part;
@@ -22,6 +24,7 @@ const formatPart = (part: unknown): string => {
 };
 
 const pushClientLog = (level: LogLevel, parts: unknown[]) => {
+  if (level === 'error') hasUnclearedClientErrors = true;
   logs.push({
     id: String(nextId),
     level,
@@ -36,6 +39,19 @@ const pushClientLog = (level: LogLevel, parts: unknown[]) => {
 };
 
 export const getClientLogs = (): LogEntry[] => [...logs];
+
+export const clearClientLogs = (): void => {
+  logs.length = 0;
+  hasUnclearedClientErrors = false;
+  for (const listener of listeners) listener();
+};
+
+export const hasUnclearedErrors = (): boolean => hasUnclearedClientErrors;
+
+export const traceClientLog = (...parts: unknown[]): void => {
+  pushClientLog('trace', parts);
+  nativeDebug(...parts);
+};
 
 export const subscribeClientLogs = (listener: () => void): (() => void) => {
   listeners.add(listener);

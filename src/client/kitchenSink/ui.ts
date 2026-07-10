@@ -2,6 +2,7 @@
 // this is plain HTML/CSS/TS to keep the example dependency-free and easy to read.
 
 import { showToast } from '@devvit/web/client';
+import { traceClientLog } from '../clientLogs';
 
 export type InputSpec = {
   id: string;
@@ -90,13 +91,16 @@ export const exampleRow = (opts: ExampleRowOptions): HTMLElement => {
       button.disabled = true;
       output.classList.remove('ks-output-error');
       output.textContent = 'Running…';
+      traceClientLog('Starting client action:', opts.title);
       try {
         const result = await opts.run(getValue, event);
         output.textContent = formatOutput(result);
+        console.info('Completed client action:', opts.title);
       } catch (error) {
         const message = errorMessage(error);
         output.classList.add('ks-output-error');
         output.textContent = `Error: ${message}`;
+        console.error('Client action failed:', opts.title, error);
         showToast(`Error: ${message}`);
       } finally {
         button.disabled = false;

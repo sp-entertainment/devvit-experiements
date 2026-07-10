@@ -1,5 +1,10 @@
 import './clientLogs';
 import { context, showToast } from '@devvit/web/client';
+import {
+  hasUnclearedErrors,
+  subscribeClientLogs,
+  traceClientLog,
+} from './clientLogs';
 import { categories } from './kitchenSink/categories';
 import { el, errorMessage } from './kitchenSink/ui';
 import { stopPhaserGame } from './phaserGame';
@@ -35,6 +40,22 @@ root.append(header, content);
 let activeId = categories[0]?.id;
 let cleanupActive: (() => void) | undefined;
 
+const updateTabState = (activeCategoryId: string) => {
+  tabs.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+    const isClientLogs = button.dataset.categoryId === 'client-logs';
+    const hasErrors = isClientLogs && hasUnclearedErrors();
+    button.classList.toggle(
+      'ks-tab-active',
+      button.dataset.categoryId === activeCategoryId
+    );
+    button.classList.toggle('ks-tab-error', hasErrors);
+    button.setAttribute(
+      'aria-label',
+      hasErrors ? 'Client Logs: errors need clearing' : (button.textContent ?? '')
+    );
+  });
+};
+
 const renderActive = () => {
   const category = categories.find((c) => c.id === activeId) ?? categories[0];
   if (!category) return;
@@ -48,6 +69,7 @@ const renderActive = () => {
 
   content.innerHTML = '';
   try {
+    traceClientLog('Rendering client tab:', category.label);
     cleanupActive = category.build(content) ?? undefined;
   } catch (error) {
     const message = errorMessage(error);
@@ -55,15 +77,11 @@ const renderActive = () => {
     const output = el('pre', 'ks-output ks-output-error');
     output.textContent = `Error: ${message}`;
     content.append(output);
+    console.error('Failed to render client tab:', category.label, error);
     showToast(`Error: ${message}`);
   }
 
-  tabs.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
-    button.classList.toggle(
-      'ks-tab-active',
-      button.dataset.categoryId === category.id
-    );
-  });
+  updateTabState(category.id);
 };
 
 for (const category of categories) {
@@ -72,10 +90,13 @@ for (const category of categories) {
   button.textContent = category.label;
   button.dataset.categoryId = category.id;
   button.addEventListener('click', () => {
+    console.info('Selected client tab:', category.label);
     activeId = category.id;
     renderActive();
   });
   tabs.append(button);
 }
 
+subscribeClientLogs(() => updateTabState(activeId ?? ''));
+console.info('Kitchen sink client initialized.');
 renderActive();

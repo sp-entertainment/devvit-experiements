@@ -1,4 +1,5 @@
 import { connectRealtime, context } from '@devvit/web/client';
+import { traceClientLog } from './clientLogs';
 import type {
   RealtimeBallMoveMessage,
   RealtimeCanvasMessage,
@@ -27,15 +28,18 @@ let connected = false;
 const ensureConnected = () => {
   if (started) return;
   started = true;
+  traceClientLog('Connecting to realtime channel:', context.postId);
 
   connectRealtime<RealtimeMessage>({
     channel: context.postId,
     onConnect: () => {
       connected = true;
+      console.info('Connected to realtime channel:', context.postId);
       statusListeners.forEach((listener) => listener(connected));
     },
     onDisconnect: () => {
       connected = false;
+      console.info('Disconnected from realtime channel:', context.postId);
       statusListeners.forEach((listener) => listener(connected));
     },
     onMessage: (msg) => {

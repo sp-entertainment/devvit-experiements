@@ -2,6 +2,7 @@ import { showToast } from '@devvit/web/client';
 import * as Phaser from 'phaser';
 import { AUTO, Game } from 'phaser';
 import { onCanvasMessage } from './realtimeChannel';
+import { traceClientLog } from './clientLogs';
 import { trpc } from './trpc';
 import {
   CANVAS_CELL_SIZE,
@@ -138,13 +139,16 @@ class SharedCanvasScene extends Phaser.Scene {
       if (!this.active) return;
 
       this.applySnapshot(snapshot.items, requestedAt);
-      if (showStatus)
+      if (showStatus) {
         this.setStatus(`Connected. ${snapshot.items.length} marks loaded.`);
+        console.info('Loaded shared canvas snapshot:', snapshot.items.length);
+      }
     } catch (error) {
       if (!this.active) return;
 
       const message = errorMessage(error);
       this.setStatus(`Canvas load failed: ${message}`);
+      console.error('Failed to load shared canvas:', error);
       showToast(`Canvas load failed: ${message}`);
     }
   }
@@ -202,6 +206,7 @@ class SharedCanvasScene extends Phaser.Scene {
 
         const message = errorMessage(error);
         this.setStatus(`Pixel failed: ${message}`);
+        console.error('Failed to share canvas pixel:', error);
         showToast(`Pixel failed: ${message}`);
       }
     })();
@@ -232,6 +237,7 @@ class SharedCanvasScene extends Phaser.Scene {
 
         const message = errorMessage(error);
         this.setStatus(`Erase failed: ${message}`);
+        console.error('Failed to erase shared canvas marks:', error);
         showToast(`Erase failed: ${message}`);
       }
     })();
@@ -311,6 +317,7 @@ class SharedCanvasScene extends Phaser.Scene {
 
       const message = errorMessage(error);
       this.setStatus(`Text failed: ${message}`);
+      console.error('Failed to share canvas text:', error);
       showToast(`Text failed: ${message}`);
     } finally {
       if (this.active) this.cancelDraft();
@@ -414,12 +421,15 @@ export const startSharedCanvasDemo = (
   parentId: string,
   controls: SharedCanvasControls = defaultControls
 ): Game => {
+  traceClientLog('Starting shared canvas demo:', parentId);
   currentGame?.destroy(true);
   currentGame = new Game({ ...config(controls), parent: parentId });
+  console.info('Started shared canvas demo:', parentId);
   return currentGame;
 };
 
 export const stopSharedCanvasDemo = (): void => {
+  if (currentGame) traceClientLog('Stopping shared canvas demo.');
   currentGame?.destroy(true);
   currentGame = undefined;
 };

@@ -14,7 +14,7 @@ const serverLogsTtlSeconds = 24 * 60 * 60;
 
 const logEntrySchema = z.object({
   id: z.string(),
-  level: z.enum(['debug', 'log', 'info', 'warn', 'error']),
+  level: z.enum(['trace', 'debug', 'log', 'info', 'warn', 'error']),
   message: z.string(),
   source: z.literal('server'),
   timestamp: z.number(),

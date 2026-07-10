@@ -77,6 +77,13 @@ body {
   color: #fff;
 }
 
+.ks-tab-error,
+.ks-tab-error:hover {
+  background: #b42318;
+  border-color: #b42318;
+  color: #fff;
+}
+
 #ks-content {
   flex: 1;
   overflow-y: auto;
