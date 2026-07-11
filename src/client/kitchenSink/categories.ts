@@ -27,9 +27,17 @@ import {
 } from '../sharedCanvasDemo';
 import { startSmoothMovementDemo } from '../smoothMovementDemo';
 import {
+  chooseTankAction,
+  joinTankGame,
+  rematchTankGame,
+  startTankGameDemo,
+  type TankGameViewModel,
+} from '../tankGameDemo';
+import {
   onCanvasConnectionChange,
   onCursorConnectionChange,
   onCursorMessage,
+  onTankGameConnectionChange,
 } from '../realtimeChannel';
 import {
   clearClientLogs,
@@ -1202,6 +1210,138 @@ const buildSmoothMovement = (container: HTMLElement) => {
   startSmoothMovementDemo('smooth-movement-container');
 };
 
+const buildTankGame = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Turn-Based Tank Game'),
+    paragraph(
+      'Two players join a server-authoritative duel. Choose Move or Fire, then tap the arena; the server validates every turn and collision before clients animate it.'
+    )
+  );
+
+  const toolbar = el('div', 'ks-tank-toolbar');
+  const joinButton = el('button', 'ks-button');
+  joinButton.textContent = 'Join';
+  joinButton.addEventListener('click', () => void joinTankGame());
+
+  const moveButton = el('button', 'ks-tool-button');
+  moveButton.textContent = 'Move';
+  moveButton.addEventListener('click', () => chooseTankAction('move'));
+
+  const fireButton = el('button', 'ks-tool-button');
+  fireButton.textContent = 'Fire';
+  fireButton.addEventListener('click', () => chooseTankAction('fire'));
+
+  const rematchButton = el('button', 'ks-button');
+  rematchButton.textContent = 'Rematch';
+  rematchButton.addEventListener('click', () => void rematchTankGame());
+  toolbar.append(joinButton, moveButton, fireButton, rematchButton);
+
+  const channelStatus = el('p', 'ks-canvas-channel-status');
+  channelStatus.textContent = `Tank channel ${context.postId}: connecting`;
+  const status = el('p', 'ks-tank-status');
+  status.textContent = 'Loading authoritative game state...';
+  const prompt = el('p', 'ks-tank-prompt');
+  prompt.textContent = 'Please wait.';
+
+  const gameContainer = el('div', 'ks-phaser-container ks-tank-game');
+  gameContainer.id = 'tank-game-container';
+
+  const lobbyHeading = el('h3', 'ks-tank-lobby-heading');
+  lobbyHeading.textContent = 'Joined players';
+  const table = el('table', 'ks-score-table ks-tank-table');
+  const tableHead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  for (const label of ['Player', 'Health', 'Status']) {
+    const cell = document.createElement('th');
+    cell.textContent = label;
+    headerRow.append(cell);
+  }
+  tableHead.append(headerRow);
+  const tableBody = document.createElement('tbody');
+  table.append(tableHead, tableBody);
+
+  const renderView = (view: TankGameViewModel) => {
+    status.textContent = view.status;
+    prompt.textContent = view.prompt;
+    moveButton.disabled = !view.canAct;
+    fireButton.disabled = !view.canAct;
+    moveButton.classList.toggle(
+      'ks-tool-active',
+      view.selectedAction === 'move'
+    );
+    fireButton.classList.toggle(
+      'ks-tool-active',
+      view.selectedAction === 'fire'
+    );
+
+    const selfIsPlayer = Boolean(
+      view.state?.players.some(
+        (player) => player.playerId === view.selfPlayerId
+      )
+    );
+    joinButton.hidden =
+      Boolean(view.state && view.state.phase !== 'lobby') || selfIsPlayer;
+    joinButton.disabled = !view.canJoin;
+    joinButton.textContent = view.selfPlayerId ? 'Join' : 'Log in to join';
+    rematchButton.hidden = view.state?.phase !== 'finished' || !selfIsPlayer;
+    rematchButton.disabled = !view.canRematch;
+
+    tableBody.replaceChildren();
+    if (!view.state?.players.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 3;
+      cell.textContent = view.state
+        ? 'No players have joined yet.'
+        : 'Loading...';
+      row.append(cell);
+      tableBody.append(row);
+      return;
+    }
+
+    for (const player of view.state.players) {
+      const row = document.createElement('tr');
+      const playerCell = document.createElement('td');
+      playerCell.textContent = `${player.username}${
+        player.playerId === view.selfPlayerId ? ' (you)' : ''
+      }`;
+      const healthCell = document.createElement('td');
+      healthCell.textContent = `${'♥'.repeat(player.health)}${'♡'.repeat(
+        3 - player.health
+      )}`;
+      const stateCell = document.createElement('td');
+      if (player.health <= 0) stateCell.textContent = 'Eliminated';
+      else if (view.state.winnerPlayerId === player.playerId)
+        stateCell.textContent = 'Winner';
+      else if (view.state.activePlayerId === player.playerId)
+        stateCell.textContent = 'Active / next';
+      else
+        stateCell.textContent =
+          view.state.phase === 'lobby' ? 'Joined' : 'Waiting';
+      row.append(playerCell, healthCell, stateCell);
+      tableBody.append(row);
+    }
+  };
+
+  container.append(
+    toolbar,
+    channelStatus,
+    status,
+    prompt,
+    gameContainer,
+    lobbyHeading,
+    table
+  );
+
+  const unsubscribeChannelStatus = onTankGameConnectionChange((connected) => {
+    channelStatus.textContent = `Tank channel ${context.postId}: ${
+      connected ? 'connected' : 'disconnected'
+    }`;
+  });
+  startTankGameDemo('tank-game-container', { renderView });
+  return unsubscribeChannelStatus;
+};
+
 const buildSharedCanvas = (container: HTMLElement) => {
   let tool: SharedCanvasTool = 'pixel';
   let color = CANVAS_COLORS[5] ?? '#38bdf8';
@@ -1322,5 +1462,6 @@ export const categories: Category[] = [
   { id: 'server-logs', label: 'Server Logs', build: buildServerLogs },
   { id: 'rendering', label: 'Rendering Demo', build: buildRendering },
   { id: 'smooth-movement', label: 'Smooth Movement', build: buildSmoothMovement },
+  { id: 'tank-game', label: 'Tank Game', build: buildTankGame },
   { id: 'shared-canvas', label: 'Shared Canvas', build: buildSharedCanvas },
 ];

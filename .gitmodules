@@ -1,6 +1,3 @@
 [submodule "refs/devvit"]
 	path = refs/devvit
 	url = https://github.com/reddit/devvit
-[submodule "refs/devvit-experiements"]
-	path = refs/devvit-experiements
-	url = https://github.com/sp-entertainment/devvit-experiements

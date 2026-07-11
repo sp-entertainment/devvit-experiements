@@ -367,3 +367,48 @@ body {
   color: rgba(255, 255, 255, 0.55);
   font-size: 12px;
 }
+
+.ks-tank-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.ks-tank-status {
+  margin: 0 0 4px;
+  color: #7fd858;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ks-tank-prompt {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
+.ks-tank-game {
+  height: min(68vh, 640px);
+  min-height: 420px;
+}
+
+.ks-tank-lobby-heading {
+  margin: 18px 0 8px;
+  color: #7fd6ff;
+  font-family: monospace;
+  font-size: 15px;
+}
+
+.ks-tank-table td:nth-child(2),
+.ks-tank-table th:nth-child(2) {
+  color: #f87171;
+  letter-spacing: 2px;
+  text-align: left;
+}
+
+.ks-tank-table td:last-child,
+.ks-tank-table th:last-child {
+  text-align: left;
+}

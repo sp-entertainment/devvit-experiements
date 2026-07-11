@@ -6,6 +6,7 @@ import type {
   RealtimeCursorMessage,
   RealtimeMessage,
 } from '../shared/realtime';
+import type { RealtimeTankGameMessage } from '../shared/tankGame';
 
 // `connectRealtime` only keeps ONE listener per channel name - a second call for the
 // same channel silently reuses the first connection's callback. Since both the
@@ -16,11 +17,13 @@ import type {
 type CursorMessageListener = (msg: RealtimeCursorMessage) => void;
 type BallMoveMessageListener = (msg: RealtimeBallMoveMessage) => void;
 type CanvasMessageListener = (msg: RealtimeCanvasMessage) => void;
+type TankGameMessageListener = (msg: RealtimeTankGameMessage) => void;
 type StatusListener = (connected: boolean) => void;
 
 const cursorListeners = new Set<CursorMessageListener>();
 const ballMoveListeners = new Set<BallMoveMessageListener>();
 const canvasListeners = new Set<CanvasMessageListener>();
+const tankGameListeners = new Set<TankGameMessageListener>();
 const statusListeners = new Set<StatusListener>();
 let started = false;
 let connected = false;
@@ -47,6 +50,8 @@ const ensureConnected = () => {
         cursorListeners.forEach((listener) => listener(msg));
       } else if (msg.type === 'ballMove') {
         ballMoveListeners.forEach((listener) => listener(msg));
+      } else if (msg.type === 'tankGameState') {
+        tankGameListeners.forEach((listener) => listener(msg));
       } else {
         canvasListeners.forEach((listener) => listener(msg));
       }
@@ -80,6 +85,14 @@ export const onCanvasMessage = (
   return () => canvasListeners.delete(listener);
 };
 
+export const onTankGameMessage = (
+  listener: TankGameMessageListener
+): (() => void) => {
+  ensureConnected();
+  tankGameListeners.add(listener);
+  return () => tankGameListeners.delete(listener);
+};
+
 export const onCursorConnectionChange = (
   listener: StatusListener
 ): (() => void) => {
@@ -90,3 +103,4 @@ export const onCursorConnectionChange = (
 };
 
 export const onCanvasConnectionChange = onCursorConnectionChange;
+export const onTankGameConnectionChange = onCursorConnectionChange;

@@ -10,6 +10,7 @@ import { settingsRouter } from './settings';
 import { cacheRouter } from './cache';
 import { devvitEventsRouter } from './devvitEvents';
 import { logsRouter } from './logs';
+import { tankGameRouter } from './tankGame';
 
 // One category per Devvit capability. Each is browsable from the kitchen-sink UI
 // (src/client/kitchenSink.ts) under a matching category tab.
@@ -25,6 +26,7 @@ export const appRouter = router({
   cache: cacheRouter,
   devvitEvents: devvitEventsRouter,
   logs: logsRouter,
+  tankGame: tankGameRouter,
 });
 
 export type AppRouter = typeof appRouter;

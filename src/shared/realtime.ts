@@ -1,3 +1,5 @@
+import type { RealtimeTankGameMessage } from './tankGame';
+
 export const BALL_WORLD_WIDTH = 1024;
 export const BALL_WORLD_HEIGHT = 768;
 export const BALL_MARGIN = 36;
@@ -162,4 +164,5 @@ export type RealtimeCanvasMessage =
 export type RealtimeMessage =
   | RealtimeCursorMessage
   | RealtimeBallMoveMessage
-  | RealtimeCanvasMessage;
+  | RealtimeCanvasMessage
+  | RealtimeTankGameMessage;
