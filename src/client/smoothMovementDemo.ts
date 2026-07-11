@@ -105,7 +105,7 @@ class SmoothMovementScene extends Phaser.Scene {
       void this.requestMove(clampPoint({ x: pointer.worldX, y: pointer.worldY }));
     });
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
     window.addEventListener('pageshow', this.handlePageShow);
 

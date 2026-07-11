@@ -1,6 +1,8 @@
+import { showToast } from '@devvit/web/client';
 import type { LogEntry, LogLevel } from '../shared/logs';
 
 const maxClientLogs = 500;
+const clientErrorToastDedupMs = 3_000;
 const logs: LogEntry[] = [];
 const listeners = new Set<() => void>();
 const nativeDebug = console.debug.bind(console);
@@ -8,6 +10,7 @@ const nativeDebug = console.debug.bind(console);
 let installed = false;
 let nextId = 0;
 let hasUnclearedClientErrors = false;
+let lastClientErrorToast: { message: string; timestamp: number } | undefined;
 
 const formatPart = (part: unknown): string => {
   if (typeof part === 'string') return part;
@@ -21,6 +24,20 @@ const formatPart = (part: unknown): string => {
   } catch {
     return String(part);
   }
+};
+
+const notifyClientError = (reason: unknown, fallbackMessage: string): void => {
+  const message =
+    reason instanceof Error ? reason.message : String(reason || fallbackMessage);
+  const timestamp = Date.now();
+  if (
+    lastClientErrorToast?.message === message &&
+    timestamp - lastClientErrorToast.timestamp < clientErrorToastDedupMs
+  )
+    return;
+
+  lastClientErrorToast = { message, timestamp };
+  showToast(`Client error: ${message}`);
 };
 
 const pushClientLog = (level: LogLevel, parts: unknown[]) => {
@@ -99,9 +116,11 @@ export const installClientLogCapture = () => {
       event.colno,
       event.error,
     ]);
+    notifyClientError(event.error, event.message);
   });
   window.addEventListener('unhandledrejection', (event) => {
     pushClientLog('error', ['Unhandled promise rejection', event.reason]);
+    notifyClientError(event.reason, 'Unhandled promise rejection');
   });
 };
 

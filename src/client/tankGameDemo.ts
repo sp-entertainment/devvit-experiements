@@ -131,7 +131,7 @@ class TankGameScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
     window.addEventListener('focus', this.handleFocus);
     window.addEventListener('pageshow', this.handlePageShow);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
 
     this.snapshotTimer = this.time.addEvent({
       delay: TANK_SNAPSHOT_INTERVAL_MS,

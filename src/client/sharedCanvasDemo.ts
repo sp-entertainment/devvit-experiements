@@ -93,7 +93,7 @@ class SharedCanvasScene extends Phaser.Scene {
       if (this.active) this.handleKey(event);
     });
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
     window.addEventListener('focus', this.handleFocus);
     window.addEventListener('pageshow', this.handlePageShow);
