@@ -6,10 +6,12 @@ import {
   TANK_GAME_STATE_VERSION,
   TANK_ROTATE_DURATION_MS,
   TANK_STARTING_HEALTH,
+  TANK_UPDATE_LOG_LIMIT,
   TANK_WORLD_HEIGHT,
   TANK_WORLD_MARGIN,
   TANK_WORLD_WIDTH,
   tankGameKey,
+  tankGameUpdatesKey,
   type RealtimeTankGameMessage,
   type TankActionRejectionReason,
   type TankActionResult,
@@ -20,6 +22,7 @@ import {
   type TankRematchResult,
   type TankResolvedAction,
   type TankSnapshot,
+  type TankUpdatesSince,
 } from '../../shared/tankGame';
 import {
   actionTravelDuration,
@@ -174,7 +177,8 @@ const mutateState = async <T>(
   const key = tankGameKey(postId);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const transaction = await redis.watch(key);
+    const updatesKey = tankGameUpdatesKey(postId);
+    const transaction = await redis.watch(key, updatesKey);
     const current = parseState(await redis.get(key));
     let decision: StateMutationDecision<T>;
 
@@ -196,6 +200,15 @@ const mutateState = async <T>(
     };
     await transaction.multi();
     await transaction.set(key, JSON.stringify(next));
+    await transaction.zAdd(updatesKey, {
+      member: JSON.stringify(next),
+      score: next.version,
+    });
+    await transaction.zRemRangeByRank(
+      updatesKey,
+      0,
+      -(TANK_UPDATE_LOG_LIMIT + 1)
+    );
     const result = await transaction.exec();
     if (result.length > 0) {
       await broadcastState(postId, next);
@@ -211,6 +224,27 @@ const readSnapshot = async (postId: string): Promise<TankSnapshot> => ({
   selfPlayerId: context.userId ?? null,
   serverNow: Date.now(),
 });
+
+const readUpdatesSince = async (
+  postId: string,
+  sinceVersion: number
+): Promise<TankUpdatesSince> => {
+  const current = parseState(await redis.get(tankGameKey(postId)));
+  const rows = await redis.zRange(
+    tankGameUpdatesKey(postId),
+    sinceVersion + 1,
+    current.version,
+    { by: 'score' }
+  );
+
+  return {
+    currentVersion: current.version,
+    updates: rows
+      .map((row) => tankStateSchema.parse(JSON.parse(row.member)))
+      .filter((state) => state.version > sinceVersion)
+      .sort((left, right) => left.version - right.version),
+  };
+};
 
 type ActionDecision =
   | { accepted: true; resolvedAction: TankResolvedAction }
@@ -229,6 +263,12 @@ export const tankGameRouter = router({
   snapshot: publicProcedure.query(
     async (): Promise<TankSnapshot> => readSnapshot(requirePostId())
   ),
+
+  updatesSince: publicProcedure
+    .input(z.object({ sinceVersion: z.number().int().min(0) }))
+    .query(async ({ input }): Promise<TankUpdatesSince> =>
+      readUpdatesSince(requirePostId(), input.sinceVersion)
+    ),
 
   join: publicProcedure.mutation(async (): Promise<TankJoinResult> => {
     const postId = requirePostId();

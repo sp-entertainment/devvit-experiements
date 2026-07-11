@@ -88,6 +88,8 @@ class TankGameScene extends Phaser.Scene {
   viewTimer: Phaser.Time.TimerEvent | undefined;
   unsubscribeRealtime: (() => void) | undefined;
   unsubscribeConnection: (() => void) | undefined;
+  pendingStates = new Map<number, TankGameState>();
+  recoveryPromise: Promise<void> | undefined;
   lastViewKey = '';
   feedback = '';
 
@@ -117,7 +119,7 @@ class TankGameScene extends Phaser.Scene {
 
     this.unsubscribeRealtime = onTankGameMessage((message) => {
       if (this.active)
-        this.applyState(message.state, undefined, message.sentAt);
+        this.enqueueState(message.state, undefined, message.sentAt);
     });
     this.unsubscribeConnection = onTankGameConnectionChange((connected) => {
       if (this.active && connected) void this.loadSnapshot(false);
@@ -212,11 +214,79 @@ class TankGameScene extends Phaser.Scene {
         snapshot.selfPlayerId,
         snapshot.serverNow
       );
+      this.discardAppliedPendingStates();
     } catch (error) {
       if (!this.active) return;
       const message = errorMessage(error);
       console.error('Failed to load tank game snapshot:', error);
       if (showErrors) showToast(`Tank game load failed: ${message}`);
+    }
+  }
+
+  enqueueState(
+    state: TankGameState,
+    selfPlayerId: string | null | undefined,
+    serverNow: number
+  ) {
+    if (!this.active) return;
+    if (!this.state || state.version <= this.state.version) return;
+
+    this.pendingStates.set(state.version, state);
+    void this.drainPendingStates(selfPlayerId, serverNow);
+  }
+
+  async drainPendingStates(
+    selfPlayerId: string | null | undefined,
+    serverNow: number
+  ) {
+    if (this.recoveryPromise) return this.recoveryPromise;
+
+    this.recoveryPromise = (async () => {
+      while (this.active && this.state) {
+        const nextVersion = this.state.version + 1;
+        const next = this.pendingStates.get(nextVersion);
+        if (next) {
+          this.pendingStates.delete(nextVersion);
+          this.applyState(next, selfPlayerId, serverNow);
+          continue;
+        }
+
+        const highestPendingVersion = Math.max(0, ...this.pendingStates.keys());
+        if (highestPendingVersion <= this.state.version) return;
+
+        try {
+          const recovery = await trpc.tankGame.updatesSince.query({
+            sinceVersion: this.state.version,
+          });
+          if (!this.active || !this.state) return;
+
+          for (const update of recovery.updates) {
+            if (update.version > this.state.version)
+              this.pendingStates.set(update.version, update);
+          }
+
+          if (!this.pendingStates.has(this.state.version + 1)) {
+            await this.loadSnapshot(false);
+            return;
+          }
+        } catch (error) {
+          console.warn('Failed to recover tank game state gap:', error);
+          await this.loadSnapshot(false);
+          return;
+        }
+      }
+    })().finally(() => {
+      this.recoveryPromise = undefined;
+    });
+
+    return this.recoveryPromise;
+  }
+
+  discardAppliedPendingStates() {
+    const version = this.state?.version;
+    if (version === undefined) return;
+    for (const pendingVersion of this.pendingStates.keys()) {
+      if (pendingVersion <= version) this.pendingStates.delete(pendingVersion);
     }
   }
 
@@ -438,14 +508,14 @@ class TankGameScene extends Phaser.Scene {
       if (result.accepted) {
         this.selectedAction = undefined;
         this.feedback = '';
-        this.applyState(
+        this.enqueueState(
           result.state,
           this.selfPlayerId ?? undefined,
           result.serverNow
         );
       } else {
         this.feedback = rejectionMessage(result.reason);
-        this.applyState(
+        this.enqueueState(
           result.state,
           this.selfPlayerId ?? undefined,
           result.serverNow
@@ -475,7 +545,7 @@ class TankGameScene extends Phaser.Scene {
       const result = await trpc.tankGame.join.mutate();
       if (!this.active) return;
       this.feedback = result.joined ? '' : 'This match is already in progress.';
-      this.applyState(
+      this.enqueueState(
         result.state,
         result.selfPlayerId ?? undefined,
         result.serverNow
@@ -504,7 +574,7 @@ class TankGameScene extends Phaser.Scene {
       const result = await trpc.tankGame.rematch.mutate();
       if (!this.active) return;
       this.feedback = result.accepted ? '' : 'Rematch is not available yet.';
-      this.applyState(
+      this.enqueueState(
         result.state,
         result.selfPlayerId ?? undefined,
         result.serverNow
@@ -618,6 +688,7 @@ class TankGameScene extends Phaser.Scene {
     window.removeEventListener('focus', this.handleFocus);
     window.removeEventListener('pageshow', this.handlePageShow);
     this.snapshotTimer?.remove(false);
+    this.pendingStates.clear();
     this.viewTimer?.remove(false);
     this.hideProjectile();
     for (const view of this.tankViews.values()) {
