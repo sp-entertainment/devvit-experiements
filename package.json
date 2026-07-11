@@ -12,7 +12,7 @@
     "lint": "eslint 'src/**/*.{ts,tsx}'",
     "login": "devvit login",
     "prettier": "prettier --write .",
-    "test": "npm run type-check && node --test dist/types/server/tankGameRules.test.js",
+    "test": "npm run type-check && node --test dist/types/server/*.test.js",
     "type-check": "tsc --build"
   },
   "engines": {

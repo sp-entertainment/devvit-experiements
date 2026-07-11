@@ -8,6 +8,7 @@ import {
 import { categories } from './kitchenSink/categories';
 import { el, errorMessage } from './kitchenSink/ui';
 import { stopPhaserGame } from './phaserGame';
+import { stopPongGame } from './pongGame';
 import { stopSharedCanvasDemo } from './sharedCanvasDemo';
 import { stopSmoothMovementDemo } from './smoothMovementDemo';
 import { stopTankGameDemo } from './tankGameDemo';
@@ -65,6 +66,7 @@ const renderActive = () => {
 
   // Only one category's Phaser instance should ever be running at a time.
   if (category.id !== 'rendering') stopPhaserGame();
+  if (category.id !== 'pong') stopPongGame();
   if (category.id !== 'smooth-movement') stopSmoothMovementDemo();
   if (category.id !== 'tank-game') stopTankGameDemo();
   if (category.id !== 'shared-canvas') stopSharedCanvasDemo();

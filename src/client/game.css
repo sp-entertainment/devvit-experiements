@@ -412,3 +412,97 @@ body {
 .ks-tank-table th:last-child {
   text-align: left;
 }
+
+.ks-pong-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.ks-pong-secondary-button {
+  background: #3f3f46;
+}
+
+.ks-pong-secondary-button:hover {
+  background: #52525b;
+}
+
+.ks-pong-status {
+  margin: 0 0 4px;
+  color: #7fd858;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ks-pong-prompt {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
+.ks-pong-game {
+  height: min(68vh, 600px);
+  min-height: 320px;
+  border-color: #52525b;
+  background: #000;
+}
+
+.ks-pong-touch-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 12px auto 0;
+  width: min(100%, 520px);
+  touch-action: none;
+  user-select: none;
+}
+
+.ks-pong-touch-button {
+  flex: 1;
+  min-height: 58px;
+  border: 2px solid #f4f4f5;
+  border-radius: 8px;
+  background: #18181b;
+  color: #fff;
+  font: 700 17px monospace;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ks-pong-touch-button:active:not(:disabled) {
+  background: #f4f4f5;
+  color: #09090b;
+}
+
+.ks-pong-touch-button:disabled {
+  border-color: #52525b;
+  color: #71717a;
+  cursor: default;
+}
+
+.ks-pong-players-heading {
+  margin: 18px 0 8px;
+  color: #f4f4f5;
+  font-family: monospace;
+  font-size: 15px;
+}
+
+.ks-pong-table td:nth-child(3),
+.ks-pong-table th:nth-child(3) {
+  text-align: center;
+  font-weight: 700;
+}
+
+.ks-pong-table td:last-child,
+.ks-pong-table th:last-child {
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .ks-pong-game {
+    height: 56vh;
+    min-height: 260px;
+  }
+}

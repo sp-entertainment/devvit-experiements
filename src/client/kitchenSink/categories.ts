@@ -34,9 +34,18 @@ import {
   type TankGameViewModel,
 } from '../tankGameDemo';
 import {
+  joinPongGame,
+  leavePongGame,
+  requestPongRematch,
+  setPongTouchAxis,
+  startPongGame,
+  type PongGameViewModel,
+} from '../pongGame';
+import {
   onCanvasConnectionChange,
   onCursorConnectionChange,
   onCursorMessage,
+  onPongGameConnectionChange,
   onTankGameConnectionChange,
 } from '../realtimeChannel';
 import {
@@ -1342,6 +1351,139 @@ const buildTankGame = (container: HTMLElement) => {
   return unsubscribeChannelStatus;
 };
 
+const buildPong = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Pong'),
+    paragraph(
+      'Two Redditors share a server-authoritative Pong match. Join a side, then use W/S, the arrow keys, or the touch controls to move your paddle.'
+    )
+  );
+
+  const toolbar = el('div', 'ks-pong-toolbar');
+  const joinButton = el('button', 'ks-button');
+  joinButton.textContent = 'Join';
+  joinButton.addEventListener('click', () => void joinPongGame());
+
+  const leaveButton = el('button', 'ks-button ks-pong-secondary-button');
+  leaveButton.textContent = 'Leave';
+  leaveButton.addEventListener('click', () => void leavePongGame());
+
+  const rematchButton = el('button', 'ks-button');
+  rematchButton.textContent = 'Rematch';
+  rematchButton.addEventListener('click', () => void requestPongRematch());
+  toolbar.append(joinButton, leaveButton, rematchButton);
+
+  const channelStatus = el('p', 'ks-canvas-channel-status');
+  channelStatus.textContent = `Pong channel ${context.postId}: connecting`;
+  const status = el('p', 'ks-pong-status');
+  status.textContent = 'Loading the Pong room...';
+  const prompt = el('p', 'ks-pong-prompt');
+  prompt.textContent = 'Please wait.';
+
+  const gameContainer = el('div', 'ks-phaser-container ks-pong-game');
+  gameContainer.id = 'pong-game-container';
+
+  const touchControls = el('div', 'ks-pong-touch-controls');
+  const upButton = el('button', 'ks-pong-touch-button');
+  upButton.textContent = '▲ Up';
+  upButton.ariaLabel = 'Move Pong paddle up';
+  const downButton = el('button', 'ks-pong-touch-button');
+  downButton.textContent = '▼ Down';
+  downButton.ariaLabel = 'Move Pong paddle down';
+  touchControls.append(upButton, downButton);
+
+  const bindTouchAxis = (button: HTMLButtonElement, axis: -1 | 1): void => {
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      button.setPointerCapture(event.pointerId);
+      setPongTouchAxis(axis);
+    });
+    const release = (event: PointerEvent) => {
+      event.preventDefault();
+      setPongTouchAxis(0);
+    };
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('lostpointercapture', release);
+  };
+  bindTouchAxis(upButton, -1);
+  bindTouchAxis(downButton, 1);
+
+  const playersHeading = el('h3', 'ks-pong-players-heading');
+  playersHeading.textContent = 'Players';
+  const table = el('table', 'ks-score-table ks-pong-table');
+  const tableHead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  for (const label of ['Side', 'Player', 'Score', 'Status']) {
+    const cell = document.createElement('th');
+    cell.textContent = label;
+    headerRow.append(cell);
+  }
+  tableHead.append(headerRow);
+  const tableBody = document.createElement('tbody');
+  table.append(tableHead, tableBody);
+
+  const renderView = (view: PongGameViewModel) => {
+    status.textContent = view.status;
+    prompt.textContent = view.prompt;
+    joinButton.hidden = !view.showJoin;
+    joinButton.disabled = !view.canJoin;
+    joinButton.textContent = view.isLoggedIn ? 'Join' : 'Log in to join';
+    leaveButton.hidden = !view.canLeave;
+    leaveButton.disabled = view.pending;
+    rematchButton.hidden = !view.showRematch;
+    rematchButton.disabled = !view.canRematch;
+    rematchButton.textContent = view.rematchReady
+      ? 'Waiting for opponent…'
+      : 'Rematch';
+    upButton.disabled = !view.canControl;
+    downButton.disabled = !view.canControl;
+
+    tableBody.replaceChildren();
+    for (const player of view.players) {
+      const row = document.createElement('tr');
+      const sideCell = document.createElement('td');
+      sideCell.textContent = player.side === 'left' ? 'Left' : 'Right';
+      const playerCell = document.createElement('td');
+      playerCell.textContent = `${player.username}${player.isSelf ? ' (you)' : ''}`;
+      const scoreCell = document.createElement('td');
+      scoreCell.textContent = String(player.score);
+      const stateCell = document.createElement('td');
+      stateCell.textContent = player.status;
+      row.append(sideCell, playerCell, scoreCell, stateCell);
+      tableBody.append(row);
+    }
+
+    if (!view.players.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 4;
+      cell.textContent = 'No players have joined yet.';
+      row.append(cell);
+      tableBody.append(row);
+    }
+  };
+
+  container.append(
+    toolbar,
+    channelStatus,
+    status,
+    prompt,
+    gameContainer,
+    touchControls,
+    playersHeading,
+    table
+  );
+
+  const unsubscribeChannelStatus = onPongGameConnectionChange((connected) => {
+    channelStatus.textContent = `Pong channel ${context.postId}: ${
+      connected ? 'connected' : 'disconnected'
+    }`;
+  });
+  startPongGame('pong-game-container', { renderView });
+  return unsubscribeChannelStatus;
+};
+
 const buildSharedCanvas = (container: HTMLElement) => {
   let tool: SharedCanvasTool = 'pixel';
   let color = CANVAS_COLORS[5] ?? '#38bdf8';
@@ -1463,5 +1605,6 @@ export const categories: Category[] = [
   { id: 'rendering', label: 'Rendering Demo', build: buildRendering },
   { id: 'smooth-movement', label: 'Smooth Movement', build: buildSmoothMovement },
   { id: 'tank-game', label: 'Tank Game', build: buildTankGame },
+  { id: 'pong', label: 'Pong', build: buildPong },
   { id: 'shared-canvas', label: 'Shared Canvas', build: buildSharedCanvas },
 ];

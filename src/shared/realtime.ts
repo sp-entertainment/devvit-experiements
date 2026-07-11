@@ -1,4 +1,5 @@
 import type { RealtimeTankGameMessage } from './tankGame';
+import type { RealtimePongStateMessage } from './pong';
 
 export const BALL_WORLD_WIDTH = 1024;
 export const BALL_WORLD_HEIGHT = 768;
@@ -165,4 +166,5 @@ export type RealtimeMessage =
   | RealtimeCursorMessage
   | RealtimeBallMoveMessage
   | RealtimeCanvasMessage
-  | RealtimeTankGameMessage;
+  | RealtimeTankGameMessage
+  | RealtimePongStateMessage;
