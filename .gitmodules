@@ -1,3 +1,6 @@
 [submodule "refs/devvit"]
 	path = refs/devvit
 	url = https://github.com/reddit/devvit
+[submodule "refs/devvit-docs"]
+	path = refs/devvit-docs
+	url = https://github.com/reddit/devvit-docs.git
