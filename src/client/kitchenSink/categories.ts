@@ -58,6 +58,7 @@ import {
   CANVAS_ERASER_MAX_RADIUS,
   CANVAS_ERASER_MIN_RADIUS,
 } from '../../shared/realtime';
+import { startRealtimeStressTab } from '../realtimeStress';
 
 export type Category = {
   id: string;
@@ -665,6 +666,9 @@ const buildRealtime = (container: HTMLElement) => {
     unsubscribeMessages();
   };
 };
+
+const buildRealtimeStress = (container: HTMLElement) =>
+  startRealtimeStressTab(container);
 
 const buildMedia = (container: HTMLElement) => {
   container.append(
@@ -1590,6 +1594,11 @@ export const categories: Category[] = [
   { id: 'my-high-score', label: 'My High Score', build: buildMyHighScore },
   { id: 'redis-debug', label: 'Redis Debug', build: buildRedisDebug },
   { id: 'realtime', label: 'Realtime', build: buildRealtime },
+  {
+    id: 'realtime-stress',
+    label: 'Realtime Stress',
+    build: buildRealtimeStress,
+  },
   { id: 'media', label: 'Media', build: buildMedia },
   { id: 'notifications', label: 'Notifications', build: buildNotifications },
   { id: 'payments', label: 'Payments', build: buildPayments },
