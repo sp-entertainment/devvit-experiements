@@ -36,7 +36,33 @@ You are writing a Devvit web application that will be executed on Reddit.com.
 
 - `npm run type-check`: Check typescript types
 - `npm run lint`: Check the linter
-- `npm run test -- my-file-name`: Run tests isolated to a file
+- `npm run test:unit`: Run the compiled server unit tests
+
+## Agent Live Validation
+
+- Run `npm run agent:doctor` before a live run. It validates the gitignored
+  `.local/reddit-accounts.json` file without printing credentials.
+- Run `npm run agent:check` before Playtest. It is the deterministic local gate.
+- Start `npm run playtest:agent`, then get the expected deployment fingerprint with
+  `npm run agent:build-id` after source changes.
+- Use the subreddit **Ensure agent fixture** menu item to create or reopen the stable
+  test post. Agent Console requires this exact registered post and displays `FIXTURE
+READY` before it can start a run. Keep the primary and secondary Reddit accounts in
+  separate browser sessions.
+- In each expanded Reddit app modal, switch the viewport selector from **Mobile** to
+  **Desktop** before inspecting or interacting with the app. Desktop mode is required
+  for every browser-based validation and screenshot.
+- Reddit may isolate the app in an iframe that browser DOM tools cannot address. Treat
+  the desktop layout, large visible controls, and screenshot-readable status text as
+  the automation contract; do not rely solely on `data-testid` selectors from outside
+  the iframe.
+- In Agent Console, client/server freshness is checked automatically on load. Entering
+  the optional expected build ID also verifies the browser against the terminal build.
+  Do not start E2E checks until visible status reports `READY`.
+  Retry for at most five minutes; never clear Reddit cache or storage.
+- Agent commands are source-registered and intentionally unauthenticated for this
+  learning project. They must namespace transient state with their run ID and register
+  cleanup data. Do not add payment functionality to the Agent Console or E2E suite.
 
 ## Code Style
 

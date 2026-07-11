@@ -1,13 +1,17 @@
 import { Hono } from 'hono';
 import type { MenuItemRequest, UiResponse } from '@devvit/web/shared';
-import { context } from '@devvit/web/server';
+import { context, reddit } from '@devvit/web/server';
 import { createPost } from '../core/post';
 import { recordMenu } from '../core/devvitEvents';
+import { getAgentFixturePostId, setAgentFixturePostId } from '../routers/agent';
 
 export const menu = new Hono();
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+const isPostId = (value: string): value is `t3_${string}` =>
+  value.startsWith('t3_');
 
 // Simplest possible menu item: create a new custom post in the subreddit the app is
 // installed in via `reddit.submitCustomPost` (see src/server/core/post.ts).
@@ -27,6 +31,41 @@ menu.post('/post-create', async (c) => {
       {
         showToast: 'Failed to create post',
       },
+      400
+    );
+  }
+});
+
+// Stores a stable, reusable post for browser agents. It intentionally stays in the
+// learning app's test subreddit so Playtest updates can be checked against one URL.
+menu.post('/agent-fixture', async (c) => {
+  try {
+    const existingId = await getAgentFixturePostId();
+    if (existingId && isPostId(existingId)) {
+      try {
+        await reddit.getPostById(existingId);
+        return c.json<UiResponse>(
+          {
+            navigateTo: `https://reddit.com/r/${context.subredditName}/comments/${existingId}`,
+          },
+          200
+        );
+      } catch {
+        // The stored post was deleted; create a fresh fixture below.
+      }
+    }
+    const post = await createPost('[Agent Fixture] Devvit Kitchen Sink');
+    await setAgentFixturePostId(post.id);
+    return c.json<UiResponse>(
+      {
+        navigateTo: `https://reddit.com/r/${context.subredditName}/comments/${post.id}`,
+      },
+      200
+    );
+  } catch (error) {
+    console.error(`Error ensuring agent fixture: ${error}`);
+    return c.json<UiResponse>(
+      { showToast: 'Failed to create agent fixture' },
       400
     );
   }
@@ -149,5 +188,8 @@ menu.post('/comment-context', async (c) => {
 
 menu.onError((error, c) => {
   console.error('Menu route failed:', error);
-  return c.json<UiResponse>({ showToast: `Menu error: ${errorMessage(error)}` }, 200);
+  return c.json<UiResponse>(
+    { showToast: `Menu error: ${errorMessage(error)}` },
+    200
+  );
 });

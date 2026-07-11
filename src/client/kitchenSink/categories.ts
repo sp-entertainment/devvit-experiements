@@ -13,13 +13,7 @@ import {
 } from '@devvit/web/client';
 import type { LogEntry } from '../../shared/logs';
 import { trpc } from '../trpc';
-import {
-  el,
-  errorMessage,
-  exampleRow,
-  paragraph,
-  sectionHeading,
-} from './ui';
+import { el, errorMessage, exampleRow, paragraph, sectionHeading } from './ui';
 import { startPhaserGame } from '../phaserGame';
 import { startLightingHallwayDemo } from '../lightingHallwayDemo';
 import {
@@ -60,6 +54,7 @@ import {
   CANVAS_ERASER_MIN_RADIUS,
 } from '../../shared/realtime';
 import { startRealtimeStressTab } from '../realtimeStress';
+import { buildAgentConsole } from './agentConsole';
 
 export type Category = {
   id: string;
@@ -72,7 +67,9 @@ export type Category = {
 const ensureCanRunAsUser = async (event: MouseEvent) => {
   const granted = await canRunAsUser(event);
   if (!granted)
-    throw new Error('The viewer has not granted the requested User Action scopes.');
+    throw new Error(
+      'The viewer has not granted the requested User Action scopes.'
+    );
   return { granted };
 };
 
@@ -271,11 +268,10 @@ const buildReddit = (container: HTMLElement) => {
       ],
       run: async (values, event) => ({
         permission: await ensureCanRunAsUser(event),
-        comment: await trpc.reddit.userActions.commentOnCurrentPostAsUser.mutate(
-          {
+        comment:
+          await trpc.reddit.userActions.commentOnCurrentPostAsUser.mutate({
             text: values('text'),
-          }
-        ),
+          }),
       }),
     }),
     exampleRow({
@@ -336,7 +332,8 @@ const buildReddit = (container: HTMLElement) => {
         {
           id: 'markdown',
           label: 'markdown',
-          defaultValue: '# Devvit Kitchen Sink Sandbox\n\nUpdated from the app.',
+          defaultValue:
+            '# Devvit Kitchen Sink Sandbox\n\nUpdated from the app.',
         },
       ],
       run: (values) =>
@@ -580,7 +577,9 @@ const buildMyHighScore = (container: HTMLElement) => {
       title: 'Set my score',
       description: 'Overwrite the current logged-in player score.',
       buttonLabel: 'Set',
-      inputs: [{ id: 'score', label: 'score', type: 'number', defaultValue: '0' }],
+      inputs: [
+        { id: 'score', label: 'score', type: 'number', defaultValue: '0' },
+      ],
       run: (values) =>
         trpc.redis.leaderboard.mine.set.mutate({
           score: Number(values('score')),
@@ -1121,7 +1120,11 @@ const buildHonoLab = (container: HTMLElement) => {
       title: 'GET /api/hono/hello/:name',
       description: 'Route params, query params, and request headers.',
       inputs: [
-        { id: 'name', label: 'name', defaultValue: context.username ?? 'devvit' },
+        {
+          id: 'name',
+          label: 'name',
+          defaultValue: context.username ?? 'devvit',
+        },
         { id: 'shout', label: 'shout 1/0', defaultValue: '1' },
       ],
       run: (values) =>
@@ -1525,7 +1528,10 @@ const buildSharedCanvas = (container: HTMLElement) => {
       button.classList.toggle('ks-tool-active', buttonTool === tool);
     }
     for (const button of colorButtons) {
-      button.classList.toggle('ks-swatch-active', button.dataset.color === color);
+      button.classList.toggle(
+        'ks-swatch-active',
+        button.dataset.color === color
+      );
     }
   };
 
@@ -1604,6 +1610,7 @@ const buildSharedCanvas = (container: HTMLElement) => {
 };
 
 export const categories: Category[] = [
+  { id: 'agent-console', label: 'Agent Console', build: buildAgentConsole },
   { id: 'reddit', label: 'Reddit API', build: buildReddit },
   { id: 'redis', label: 'Redis', build: buildRedis },
   { id: 'leaderboard', label: 'Leaderboard', build: buildLeaderboard },
@@ -1633,7 +1640,11 @@ export const categories: Category[] = [
     label: 'Lighting Hallway',
     build: buildLightingHallway,
   },
-  { id: 'smooth-movement', label: 'Smooth Movement', build: buildSmoothMovement },
+  {
+    id: 'smooth-movement',
+    label: 'Smooth Movement',
+    build: buildSmoothMovement,
+  },
   { id: 'tank-game', label: 'Tank Game', build: buildTankGame },
   { id: 'pong', label: 'Pong', build: buildPong },
   { id: 'shared-canvas', label: 'Shared Canvas', build: buildSharedCanvas },

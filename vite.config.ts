@@ -1,25 +1,25 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import { devvit } from '@devvit/start/vite';
-import { execSync } from 'node:child_process';
+import { getBuildId, buildInputs } from './tools/build-id.mjs';
 
-const gitSha = (() => {
-  try {
-    return execSync('git rev-parse --short HEAD', {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .toString()
-      .trim();
-  } catch {
-    return 'nogit';
-  }
-})();
-const buildTime = new Date().toISOString().slice(0, 16).replace('T', ' ');
+const buildInfoPlugin = (): Plugin => ({
+  name: 'agent-build-info',
+  resolveId: (id: string) =>
+    id === 'virtual:agent-build-info'
+      ? '\0virtual:agent-build-info'
+      : undefined,
+  async load(id: string) {
+    if (id !== '\0virtual:agent-build-info') return undefined;
+    for (const input of await buildInputs()) this.addWatchFile(input);
+    const buildId = await getBuildId();
+    console.info(`[agent] build ${buildId}`);
+    return `export const buildId = ${JSON.stringify(buildId)};`;
+  },
+});
 
 export default defineConfig({
-  define: {
-    __BUILD_ID__: JSON.stringify(`${gitSha} ${buildTime}Z`),
-  },
   plugins: [
+    buildInfoPlugin(),
     devvit({
       client: {
         build: {

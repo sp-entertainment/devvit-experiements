@@ -21,11 +21,7 @@
     "reddit": {
       "enable": true,
       "scope": "moderator",
-      "asUser": [
-        "SUBMIT_POST",
-        "SUBMIT_COMMENT",
-        "SUBSCRIBE_TO_SUBREDDIT"
-      ]
+      "asUser": ["SUBMIT_POST", "SUBMIT_COMMENT", "SUBSCRIBE_TO_SUBREDDIT"]
     },
     "redis": true,
     "realtime": true,
@@ -40,6 +36,13 @@
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/post-create"
+      },
+      {
+        "label": "Ensure agent fixture",
+        "description": "Create a stable post for live agent validation",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/agent-fixture"
       },
       {
         "label": "Example form",

@@ -13,12 +13,11 @@ import { stopPongGame } from './pongGame';
 import { stopSharedCanvasDemo } from './sharedCanvasDemo';
 import { stopSmoothMovementDemo } from './smoothMovementDemo';
 import { stopTankGameDemo } from './tankGameDemo';
-
-declare const __BUILD_ID__: string;
+import { buildId } from '../shared/buildInfo';
 
 const version = document.getElementById('app-version');
 if (version)
-  version.textContent = `app v${context.appVersion} | build ${__BUILD_ID__}`;
+  version.textContent = `app v${context.appVersion} | build ${buildId}`;
 
 const root = document.getElementById('kitchen-sink');
 if (!root)
@@ -54,7 +53,9 @@ const updateTabState = (activeCategoryId: string) => {
     button.classList.toggle('ks-tab-error', hasErrors);
     button.setAttribute(
       'aria-label',
-      hasErrors ? 'Client Logs: errors need clearing' : (button.textContent ?? '')
+      hasErrors
+        ? 'Client Logs: errors need clearing'
+        : (button.textContent ?? '')
     );
   });
 };
