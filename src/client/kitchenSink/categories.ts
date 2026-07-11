@@ -21,6 +21,7 @@ import {
   sectionHeading,
 } from './ui';
 import { startPhaserGame } from '../phaserGame';
+import { startLightingHallwayDemo } from '../lightingHallwayDemo';
 import {
   startSharedCanvasDemo,
   type SharedCanvasTool,
@@ -1208,6 +1209,21 @@ const buildRendering = (container: HTMLElement) => {
   startPhaserGame('game-container');
 };
 
+const buildLightingHallway = (container: HTMLElement) => {
+  container.append(
+    sectionHeading('Lighting Hallway (Phaser 4)'),
+    paragraph(
+      'A pixel-art stone corridor rendered with Phaser 4 dynamic lighting. The torch moves continuously through the hall, revealing the normal-mapped stone and rock relief.'
+    )
+  );
+
+  const gameContainer = el('div', 'ks-phaser-container ks-lighting-hallway');
+  gameContainer.id = 'lighting-hallway-container';
+  container.append(gameContainer);
+
+  startLightingHallwayDemo('lighting-hallway-container');
+};
+
 const buildSmoothMovement = (container: HTMLElement) => {
   container.append(
     sectionHeading('Smooth Movement (Realtime + Phaser)'),
@@ -1612,6 +1628,11 @@ export const categories: Category[] = [
   { id: 'client-logs', label: 'Client Logs', build: buildClientLogs },
   { id: 'server-logs', label: 'Server Logs', build: buildServerLogs },
   { id: 'rendering', label: 'Rendering Demo', build: buildRendering },
+  {
+    id: 'lighting-hallway',
+    label: 'Lighting Hallway',
+    build: buildLightingHallway,
+  },
   { id: 'smooth-movement', label: 'Smooth Movement', build: buildSmoothMovement },
   { id: 'tank-game', label: 'Tank Game', build: buildTankGame },
   { id: 'pong', label: 'Pong', build: buildPong },

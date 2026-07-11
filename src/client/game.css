@@ -321,6 +321,10 @@ body {
   overflow: hidden;
 }
 
+.ks-lighting-hallway {
+  background: #06080d;
+}
+
 .ks-canvas-toolbar {
   display: flex;
   align-items: center;
