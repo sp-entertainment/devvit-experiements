@@ -1527,11 +1527,16 @@ const buildSharedCanvas = (container: HTMLElement) => {
   const updateControls = () => {
     for (const [buttonTool, button] of toolButtons) {
       button.classList.toggle('ks-tool-active', buttonTool === tool);
+      button.setAttribute('aria-pressed', String(buttonTool === tool));
     }
     for (const button of colorButtons) {
       button.classList.toggle(
         'ks-swatch-active',
         button.dataset.color === color
+      );
+      button.setAttribute(
+        'aria-pressed',
+        String(button.dataset.color === color)
       );
     }
   };
@@ -1592,6 +1597,8 @@ const buildSharedCanvas = (container: HTMLElement) => {
   toolbar.append(eraserLabel);
 
   const status = el('p', 'ks-canvas-status');
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
   status.textContent = 'Connecting...';
   const channelStatus = el('p', 'ks-canvas-channel-status');
   const channelName = context.postId;

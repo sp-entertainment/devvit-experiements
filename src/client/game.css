@@ -183,6 +183,13 @@ body {
   cursor: default;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #7fd6ff;
+  outline-offset: 2px;
+}
+
 .ks-stress-warning {
   margin: 0 0 12px;
   color: #ffcc66;
