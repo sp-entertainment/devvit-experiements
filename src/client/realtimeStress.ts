@@ -58,6 +58,8 @@ export const startRealtimeStressTab = (
   let serverNowAtPoll = Date.now();
   let monotonicAtPoll = performance.now();
   let finalizeTimer: ReturnType<typeof setTimeout> | undefined;
+  let lifecycleEpoch = 0;
+  let membershipEpoch = 0;
   const submittedRunIds = new Set<string>();
 
   container.append(
@@ -390,7 +392,8 @@ export const startRealtimeStressTab = (
   };
 
   const detachFromOldLobby = (): void => {
-    if (channel) disconnectRealtime(channel);
+    const previousChannel = channel;
+    membershipEpoch += 1;
     channel = undefined;
     joinedLobbyId = undefined;
     ready = false;
@@ -399,13 +402,23 @@ export const startRealtimeStressTab = (
     submittedRunIds.clear();
     if (finalizeTimer) clearTimeout(finalizeTimer);
     finalizeTimer = undefined;
+    if (previousChannel) disconnectRealtime(previousChannel);
   };
 
   const pollStatus = async (): Promise<void> => {
     if (destroyed || polling) return;
+    const requestLifecycle = lifecycleEpoch;
+    const requestMembership = membershipEpoch;
     polling = true;
     try {
       const nextSnapshot = await trpc.realtimeStress.status.query();
+      if (
+        destroyed ||
+        requestLifecycle !== lifecycleEpoch ||
+        requestMembership !== membershipEpoch
+      ) {
+        return;
+      }
       serverNowAtPoll = nextSnapshot.serverNow;
       monotonicAtPoll = performance.now();
       if (joinedLobbyId && nextSnapshot.lobbyId !== joinedLobbyId) {
@@ -421,6 +434,7 @@ export const startRealtimeStressTab = (
       }
       render();
     } catch (error) {
+      if (destroyed || requestLifecycle !== lifecycleEpoch) return;
       console.error('Failed to poll Realtime stress-test status:', error);
       status.textContent = `Status error: ${errorMessage(error)}`;
     } finally {
@@ -430,27 +444,73 @@ export const startRealtimeStressTab = (
 
   joinButton.addEventListener('click', () => {
     void (async () => {
+      const requestLifecycle = lifecycleEpoch;
       joining = true;
       render();
       try {
         const joined = await trpc.realtimeStress.join.mutate({ clientId });
+        if (destroyed || requestLifecycle !== lifecycleEpoch) {
+          void trpc.realtimeStress.leave
+            .mutate({ clientId, lobbyId: joined.lobbyId })
+            .catch((error) =>
+              console.debug('Unable to clean up a stale stress join:', error)
+            );
+          return;
+        }
+        membershipEpoch += 1;
+        const connectionMembership = membershipEpoch;
         username = joined.username;
         joinedLobbyId = joined.lobbyId;
         channel = joined.channel;
         connectRealtime<RealtimeStressDataMessage>({
           channel: joined.channel,
           onConnect: () => {
+            if (
+              destroyed ||
+              connectionMembership !== membershipEpoch ||
+              joinedLobbyId !== joined.lobbyId
+            ) {
+              disconnectRealtime(joined.channel);
+              return;
+            }
+            if (
+              latestSnapshot.status !== 'empty' &&
+              latestSnapshot.status !== 'idle'
+            ) {
+              ready = true;
+              render();
+              return;
+            }
             void (async () => {
               try {
-                latestSnapshot = await trpc.realtimeStress.ready.mutate({
+                const nextSnapshot = await trpc.realtimeStress.ready.mutate({
                   clientId,
                   lobbyId: joined.lobbyId,
                 });
+                if (
+                  destroyed ||
+                  connectionMembership !== membershipEpoch ||
+                  joinedLobbyId !== joined.lobbyId
+                ) {
+                  void trpc.realtimeStress.leave
+                    .mutate({ clientId, lobbyId: joined.lobbyId })
+                    .catch((error) =>
+                      console.debug(
+                        'Unable to clean up a stale ready client:',
+                        error
+                      )
+                    );
+                  return;
+                }
+                latestSnapshot = nextSnapshot;
                 serverNowAtPoll = latestSnapshot.serverNow;
                 monotonicAtPoll = performance.now();
                 ready = true;
                 render();
               } catch (error) {
+                if (destroyed || connectionMembership !== membershipEpoch) {
+                  return;
+                }
                 console.error(
                   'Failed to mark stress-test client ready:',
                   error
@@ -460,15 +520,19 @@ export const startRealtimeStressTab = (
             })();
           },
           onDisconnect: () => {
+            if (
+              destroyed ||
+              connectionMembership !== membershipEpoch ||
+              joinedLobbyId !== joined.lobbyId
+            ) {
+              return;
+            }
             if (stats) disconnects += 1;
             ready = false;
-            if (
-              !destroyed &&
-              joinedLobbyId &&
-              latestSnapshot.status === 'idle'
-            ) {
+            if (latestSnapshot.status === 'idle') {
+              detachFromOldLobby();
               void trpc.realtimeStress.leave
-                .mutate({ clientId, lobbyId: joinedLobbyId })
+                .mutate({ clientId, lobbyId: joined.lobbyId })
                 .then(() => pollStatus())
                 .catch((error) =>
                   console.debug(
@@ -480,6 +544,13 @@ export const startRealtimeStressTab = (
             render();
           },
           onMessage: (message) => {
+            if (
+              destroyed ||
+              connectionMembership !== membershipEpoch ||
+              joinedLobbyId !== joined.lobbyId
+            ) {
+              return;
+            }
             recordRealtimeStressMessage(
               ensureStats(message.runId),
               message,
@@ -489,11 +560,12 @@ export const startRealtimeStressTab = (
           },
         });
       } catch (error) {
+        if (destroyed || requestLifecycle !== lifecycleEpoch) return;
         console.error('Failed to join Realtime stress test:', error);
         showToast(`Join failed: ${errorMessage(error)}`);
       } finally {
         joining = false;
-        render();
+        if (!destroyed && requestLifecycle === lifecycleEpoch) render();
       }
     })();
   });
@@ -501,33 +573,42 @@ export const startRealtimeStressTab = (
   startButton.addEventListener('click', () => {
     void (async () => {
       if (!joinedLobbyId) return;
+      const requestLifecycle = lifecycleEpoch;
+      const lobbyId = joinedLobbyId;
       startInFlight = true;
       render();
       try {
         await trpc.realtimeStress.start.mutate({
           clientId,
-          lobbyId: joinedLobbyId,
+          lobbyId,
         });
       } catch (error) {
+        if (destroyed || requestLifecycle !== lifecycleEpoch) return;
         console.error('Realtime stress test failed:', error);
         showToast(`Stress test failed: ${errorMessage(error)}`);
       } finally {
         startInFlight = false;
-        await pollStatus();
-        render();
+        if (!destroyed && requestLifecycle === lifecycleEpoch) {
+          await pollStatus();
+          render();
+        }
       }
     })();
   });
 
   resetButton.addEventListener('click', () => {
     void (async () => {
+      const requestLifecycle = lifecycleEpoch;
       try {
         detachFromOldLobby();
-        latestSnapshot = await trpc.realtimeStress.reset.mutate();
+        const nextSnapshot = await trpc.realtimeStress.reset.mutate();
+        if (destroyed || requestLifecycle !== lifecycleEpoch) return;
+        latestSnapshot = nextSnapshot;
         serverNowAtPoll = latestSnapshot.serverNow;
         monotonicAtPoll = performance.now();
         render();
       } catch (error) {
+        if (destroyed || requestLifecycle !== lifecycleEpoch) return;
         console.error('Failed to reset Realtime stress test:', error);
         showToast(`Reset failed: ${errorMessage(error)}`);
       }
@@ -539,14 +620,18 @@ export const startRealtimeStressTab = (
   void pollStatus();
 
   return () => {
+    const lobbyToLeave = joinedLobbyId;
+    const channelToDisconnect = channel;
     destroyed = true;
+    lifecycleEpoch += 1;
+    membershipEpoch += 1;
     clearInterval(statusTimer);
     clearInterval(liveTimer);
     if (finalizeTimer) clearTimeout(finalizeTimer);
-    if (channel) disconnectRealtime(channel);
-    if (joinedLobbyId && latestSnapshot.status === 'idle') {
+    if (channelToDisconnect) disconnectRealtime(channelToDisconnect);
+    if (lobbyToLeave && latestSnapshot.status === 'idle') {
       void trpc.realtimeStress.leave
-        .mutate({ clientId, lobbyId: joinedLobbyId })
+        .mutate({ clientId, lobbyId: lobbyToLeave })
         .catch((error) =>
           console.debug('Unable to leave stress-test lobby:', error)
         );
