@@ -55,6 +55,15 @@ const clamp = (value: number, min: number, max: number) =>
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
+const wait = async (delayMs: number): Promise<void> => {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+};
+
+const PIXEL_BATCH_MAX_ATTEMPTS = 4;
+const PIXEL_BATCH_RETRY_DELAY_MS = 75;
+
 const defaultControls: SharedCanvasControls = {
   getTool: () => 'pixel',
   getColor: () => CANVAS_COLORS[5] ?? '#38bdf8',
@@ -68,12 +77,17 @@ class SharedCanvasScene extends Phaser.Scene {
   controls: SharedCanvasControls;
   items = new Map<string, CanvasView>();
   paintedThisDrag = new Set<string>();
+  dragPixels = new Map<string, PixelRequest>();
+  pendingPixels = new Map<
+    string,
+    { object: Phaser.GameObjects.Rectangle; request: PixelRequest }
+  >();
   unsubscribeRealtime: (() => void) | undefined;
   lastEraseAt = 0;
   active = false;
   canvasRevision = 0;
-  pixelQueue: PixelRequest[] = [];
-  pixelWriteInFlight = false;
+  pixelBatchQueue: PixelRequest[][] = [];
+  pixelBatchInFlight = false;
   snapshotPromise: Promise<void> | undefined;
   snapshotRefreshRequested = false;
   textCommitInFlight = false;
@@ -97,12 +111,16 @@ class SharedCanvasScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (!this.active) return;
       this.paintedThisDrag.clear();
+      this.dragPixels.clear();
       this.handlePointer(pointer, true);
     });
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (this.active && pointer.isDown) this.handlePointer(pointer, false);
     });
-    this.input.on('pointerup', () => this.paintedThisDrag.clear());
+    this.input.on('pointerup', () => {
+      this.commitDragPixels();
+      this.paintedThisDrag.clear();
+    });
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
     window.addEventListener('focus', this.handleFocus);
@@ -225,32 +243,86 @@ class SharedCanvasScene extends Phaser.Scene {
     const key = `${col}:${row}`;
     if (this.paintedThisDrag.has(key)) return;
     this.paintedThisDrag.add(key);
-    this.pixelQueue.push({ col, row, color: this.controls.getColor() });
-    void this.flushPixelQueue();
+    const request = { col, row, color: this.controls.getColor() };
+    this.dragPixels.set(key, request);
+    this.renderPendingPixel(request);
   }
 
-  async flushPixelQueue() {
-    if (!this.active || this.pixelWriteInFlight) return;
-    const request = this.pixelQueue.shift();
-    if (!request) return;
+  renderPendingPixel(request: PixelRequest) {
+    const id = `p:${request.col}:${request.row}`;
+    const current = this.pendingPixels.get(id);
+    if (current) {
+      current.object.setFillStyle(colorNumber(request.color));
+      current.request = request;
+      return;
+    }
 
-    this.pixelWriteInFlight = true;
+    const object = this.add
+      .rectangle(
+        request.col * CANVAS_CELL_SIZE,
+        request.row * CANVAS_CELL_SIZE,
+        CANVAS_CELL_SIZE,
+        CANVAS_CELL_SIZE,
+        colorNumber(request.color),
+        1
+      )
+      .setOrigin(0)
+      .setDepth(3);
+    this.pendingPixels.set(id, { object, request });
+  }
+
+  removePendingPixel(id: string, request?: PixelRequest) {
+    const pending = this.pendingPixels.get(id);
+    if (!pending || (request && pending.request !== request)) return;
+    pending.object.destroy();
+    this.pendingPixels.delete(id);
+  }
+
+  commitDragPixels() {
+    if (this.dragPixels.size === 0) return;
+    this.pixelBatchQueue.push([...this.dragPixels.values()]);
+    this.dragPixels.clear();
+    void this.flushPixelBatches();
+  }
+
+  async flushPixelBatches() {
+    if (!this.active || this.pixelBatchInFlight) return;
+    const pixels = this.pixelBatchQueue.shift();
+    if (!pixels) return;
+
+    this.pixelBatchInFlight = true;
+    let failure: unknown;
     try {
-      const { item } = await trpc.realtime.canvas.putPixel.mutate(request);
-      if (!this.active) return;
+      for (let attempt = 1; attempt <= PIXEL_BATCH_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          const result = await trpc.realtime.canvas.putPixels.mutate({
+            pixels,
+          });
+          if (!this.active) return;
 
-      this.applyPut(item, item.revision);
-      this.setStatus('Pixel shared.');
-    } catch (error) {
-      if (!this.active) return;
+          this.applyPuts(result.items, result.revision, pixels);
+          this.setStatus(`Shared ${result.items.length} pixel(s).`);
+          return;
+        } catch (error) {
+          failure = error;
+          if (attempt < PIXEL_BATCH_MAX_ATTEMPTS) {
+            await wait(PIXEL_BATCH_RETRY_DELAY_MS * attempt);
+          }
+        }
+      }
 
-      const message = errorMessage(error);
-      this.setStatus(`Pixel failed: ${message}`);
-      console.error('Failed to share canvas pixel:', error);
-      showToast(`Pixel failed: ${message}`);
+      if (!this.active) return;
+      for (const pixel of pixels) {
+        this.removePendingPixel(`p:${pixel.col}:${pixel.row}`, pixel);
+      }
+      const message = errorMessage(failure);
+      this.setStatus(`Pixel batch failed: ${message}`);
+      console.error('Failed to share shared canvas pixel batch:', failure);
+      showToast(`Pixel batch failed: ${message}`);
+      void this.loadSnapshot(false);
     } finally {
-      this.pixelWriteInFlight = false;
-      if (this.active) void this.flushPixelQueue();
+      this.pixelBatchInFlight = false;
+      if (this.active) void this.flushPixelBatches();
     }
   }
 
@@ -333,15 +405,33 @@ class SharedCanvasScene extends Phaser.Scene {
 
     if (message.type === 'canvasPut') {
       this.applyPut(message.item, message.item.revision);
+    } else if (message.type === 'canvasPutBatch') {
+      this.applyPuts(message.items, message.revision);
     } else {
       this.applyErase(message.ids, message.revision);
     }
   }
 
   applyPut(item: CanvasItem, revision: number) {
+    this.applyPuts([item], revision);
+  }
+
+  applyPuts(
+    items: CanvasItem[],
+    revision: number,
+    confirmedPixels: PixelRequest[] = []
+  ) {
+    const confirmedById = new Map(
+      confirmedPixels.map((pixel) => [`p:${pixel.col}:${pixel.row}`, pixel])
+    );
+    if (confirmedById.size > 0) {
+      for (const item of items) {
+        this.removePendingPixel(item.id, confirmedById.get(item.id));
+      }
+    }
     if (!this.active || revision <= this.canvasRevision) return;
     const missedRevision = revision > this.canvasRevision + 1;
-    this.renderPut(item);
+    for (const item of items) this.renderPut(item);
     this.canvasRevision = revision;
     if (missedRevision) void this.loadSnapshot(false);
   }
@@ -403,7 +493,12 @@ class SharedCanvasScene extends Phaser.Scene {
     );
     window.removeEventListener('focus', this.handleFocus);
     window.removeEventListener('pageshow', this.handlePageShow);
-    this.pixelQueue = [];
+    this.dragPixels.clear();
+    this.pixelBatchQueue = [];
+    for (const pending of this.pendingPixels.values()) {
+      pending.object.destroy();
+    }
+    this.pendingPixels.clear();
     for (const { object } of this.items.values()) {
       object.destroy();
     }

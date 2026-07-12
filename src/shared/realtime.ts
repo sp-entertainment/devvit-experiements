@@ -157,6 +157,13 @@ export type RealtimeCanvasPutMessage = {
   sentAt: number;
 };
 
+export type RealtimeCanvasPutBatchMessage = {
+  type: 'canvasPutBatch';
+  items: CanvasItem[];
+  revision: number;
+  sentAt: number;
+};
+
 export type RealtimeCanvasEraseMessage = {
   type: 'canvasErase';
   ids: string[];
@@ -165,7 +172,9 @@ export type RealtimeCanvasEraseMessage = {
 };
 
 export type RealtimeCanvasMessage =
-  RealtimeCanvasPutMessage | RealtimeCanvasEraseMessage;
+  | RealtimeCanvasPutMessage
+  | RealtimeCanvasPutBatchMessage
+  | RealtimeCanvasEraseMessage;
 
 export type RealtimeMessage =
   | RealtimeCursorMessage
