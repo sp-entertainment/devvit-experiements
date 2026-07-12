@@ -4,6 +4,6 @@
 [submodule "refs/devvit-docs"]
 	path = refs/devvit-docs
 	url = https://github.com/reddit/devvit-docs.git
-[submodule "devvit-template-phaser"]
-	path = devvit-template-phaser
+[submodule "refs/devvit-template-phaser"]
+	path = refs/devvit-template-phaser
 	url = https://github.com/reddit/devvit-template-phaser.git
