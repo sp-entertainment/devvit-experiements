@@ -30,8 +30,14 @@ import {
 } from '../../shared/realtime';
 
 const ballPointSchema = z.object({
-  x: z.number().min(BALL_MARGIN).max(BALL_WORLD_WIDTH - BALL_MARGIN),
-  y: z.number().min(BALL_MARGIN).max(BALL_WORLD_HEIGHT - BALL_MARGIN),
+  x: z
+    .number()
+    .min(BALL_MARGIN)
+    .max(BALL_WORLD_WIDTH - BALL_MARGIN),
+  y: z
+    .number()
+    .min(BALL_MARGIN)
+    .max(BALL_WORLD_HEIGHT - BALL_MARGIN),
 });
 
 const ballStateSchema = z.object({
@@ -47,9 +53,11 @@ const ballStateSchema = z.object({
   updatedAt: z.number().int(),
 });
 
-const colorSchema = z.string().refine((color) => CANVAS_COLORS.includes(color), {
-  message: 'Unsupported canvas color',
-});
+const colorSchema = z
+  .string()
+  .refine((color) => CANVAS_COLORS.includes(color), {
+    message: 'Unsupported canvas color',
+  });
 
 const canvasPixelItemSchema = z.object({
   kind: z.literal('pixel'),
@@ -57,8 +65,16 @@ const canvasPixelItemSchema = z.object({
   userId: z.string(),
   username: z.string(),
   color: colorSchema,
-  col: z.number().int().min(0).max(CANVAS_GRID_COLS - 1),
-  row: z.number().int().min(0).max(CANVAS_GRID_ROWS - 1),
+  col: z
+    .number()
+    .int()
+    .min(0)
+    .max(CANVAS_GRID_COLS - 1),
+  row: z
+    .number()
+    .int()
+    .min(0)
+    .max(CANVAS_GRID_ROWS - 1),
   updatedAt: z.number().int(),
 });
 
@@ -86,7 +102,8 @@ const requirePostId = () => {
 };
 
 const requireUser = () => {
-  if (!context.userId || !context.username) throw new Error('Must be logged in');
+  if (!context.userId || !context.username)
+    throw new Error('Must be logged in');
   return {
     playerId: context.userId,
     userId: context.userId,
@@ -202,9 +219,11 @@ const sendBallMove = async (
   postId: string,
   message: RealtimeBallMoveMessage
 ) => {
-  await realtime.send<RealtimeBallMoveMessage>(postId, message).catch((error) => {
-    console.error('Failed to broadcast ball move:', error);
-  });
+  await realtime
+    .send<RealtimeBallMoveMessage>(postId, message)
+    .catch((error) => {
+      console.error('Failed to broadcast ball move:', error);
+    });
 };
 
 const readCanvasItems = async (key: string): Promise<CanvasItem[]> => {
@@ -363,8 +382,16 @@ export const realtimeRouter = router({
     putPixel: publicProcedure
       .input(
         z.object({
-          col: z.number().int().min(0).max(CANVAS_GRID_COLS - 1),
-          row: z.number().int().min(0).max(CANVAS_GRID_ROWS - 1),
+          col: z
+            .number()
+            .int()
+            .min(0)
+            .max(CANVAS_GRID_COLS - 1),
+          row: z
+            .number()
+            .int()
+            .min(0)
+            .max(CANVAS_GRID_ROWS - 1),
           color: colorSchema,
         })
       )

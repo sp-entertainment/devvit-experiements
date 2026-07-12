@@ -13,7 +13,7 @@
     "dev": "devvit playtest",
     "launch": "npm run deploy && devvit publish",
     "lint": "eslint 'src/**/*.{ts,tsx}'",
-    "format:check": "prettier --check AGENTS.md README.md package.json devvit.json vite.config.ts src/client/kitchenSink.ts src/client/splash.ts src/client/kitchenSink/categories.ts src/client/kitchenSink/agentConsole.ts src/server/core/post.ts src/server/routers/index.ts src/server/routers/agent.ts src/server/agent/commands.ts src/server/routes/menu.ts src/shared/buildInfo.ts src/shared/virtual-agent-build-info.d.ts tools/agent-doctor.mjs tools/build-id.mjs tools/build-id.d.mts",
+    "format:check": "prettier --check .",
     "playtest:agent": "devvit playtest --show-timestamps --log-runtime --debounce 300",
     "login": "devvit login",
     "prettier": "prettier --write .",

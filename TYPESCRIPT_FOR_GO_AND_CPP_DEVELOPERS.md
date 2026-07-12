@@ -14,12 +14,12 @@ Redis, HTTP, Reddit, and the browser must still be validated.
 
 ## 1. Orient yourself in the codebase
 
-| Area | Role | Good first file |
-| --- | --- | --- |
-| `src/shared` | Data contracts and constants used by browser and server | [`tankGame.ts`](src/shared/tankGame.ts) |
-| `src/server` | Node/Devvit handlers, Redis, validation, game rules | [`routers/tankGame.ts`](src/server/routers/tankGame.ts) |
-| `src/client` | Browser iframe, Phaser scenes, DOM UI, tRPC calls | [`tankGameDemo.ts`](src/client/tankGameDemo.ts) |
-| `tools` | Strict TypeScript configuration for each build target | [`tsconfig.base.json`](tools/tsconfig.base.json) |
+| Area         | Role                                                    | Good first file                                         |
+| ------------ | ------------------------------------------------------- | ------------------------------------------------------- |
+| `src/shared` | Data contracts and constants used by browser and server | [`tankGame.ts`](src/shared/tankGame.ts)                 |
+| `src/server` | Node/Devvit handlers, Redis, validation, game rules     | [`routers/tankGame.ts`](src/server/routers/tankGame.ts) |
+| `src/client` | Browser iframe, Phaser scenes, DOM UI, tRPC calls       | [`tankGameDemo.ts`](src/client/tankGameDemo.ts)         |
+| `tools`      | Strict TypeScript configuration for each build target   | [`tsconfig.base.json`](tools/tsconfig.base.json)        |
 
 The tank game is the clearest vertical slice:
 
@@ -129,7 +129,7 @@ access the other branch's property before narrowing.
 
 ## 4. Values, types, imports, and `typeof`
 
-TypeScript has separate compile-time *type* and runtime *value* namespaces.
+TypeScript has separate compile-time _type_ and runtime _value_ namespaces.
 For example, [`tankGame.ts`](src/shared/tankGame.ts#L1-L4) exports a numeric
 constant, then derives a type from its value:
 
@@ -168,8 +168,7 @@ function playerColor(index: number): string {
   return TANK_COLORS[index] ?? '#38bdf8';
 }
 
-const playerColor = (index: number): string =>
-  TANK_COLORS[index] ?? '#38bdf8';
+const playerColor = (index: number): string => TANK_COLORS[index] ?? '#38bdf8';
 ```
 
 The repository normally uses the arrow form for helpers and callbacks. A
@@ -194,7 +193,9 @@ caller-specific result while handling common Redis transaction mechanics:
 const mutateState = async <T>(
   postId: string,
   mutate: (state: TankGameState) => StateMutationDecision<T>
-): Promise<StateMutationResult<T>> => { /* ... */ };
+): Promise<StateMutationResult<T>> => {
+  /* ... */
+};
 ```
 
 Read `<T>` as Go's `[T any]` or a C++ template parameter. Unlike C++ templates,
@@ -206,19 +207,20 @@ The DOM helper [`el`](src/client/kitchenSink/ui.ts#L28-L35) shows a useful
 advanced generic: the chosen HTML tag controls its exact return type.
 
 ```ts
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K)
-  : HTMLElementTagNameMap[K] => document.createElement(tag);
+const el = <K extends keyof HTMLElementTagNameMap>(
+  tag: K
+): HTMLElementTagNameMap[K] => document.createElement(tag);
 ```
 
 You can read `K extends ...` as “`K` is constrained to the keys of this map.”
 
 ## 6. Collections and safe lookup
 
-| TypeScript | Meaning | Go/C++ instinct |
-| --- | --- | --- |
-| `TankPlayerState[]` | array of players | `[]TankPlayerState` / `std::vector<TankPlayerState>` |
-| `new Map<string, TankView>()` | keyed collection | `map[string]TankView` / `std::unordered_map<std::string, TankView>` |
-| `Record<string, HTMLInputElement>` | object with string keys | `map[string]HTMLInputElement` |
+| TypeScript                         | Meaning                 | Go/C++ instinct                                                     |
+| ---------------------------------- | ----------------------- | ------------------------------------------------------------------- |
+| `TankPlayerState[]`                | array of players        | `[]TankPlayerState` / `std::vector<TankPlayerState>`                |
+| `new Map<string, TankView>()`      | keyed collection        | `map[string]TankView` / `std::unordered_map<std::string, TankView>` |
+| `Record<string, HTMLInputElement>` | object with string keys | `map[string]HTMLInputElement`                                       |
 
 `for (const player of players)` is the ordinary iteration form. Array methods
 such as `.map`, `.find`, `.filter`, and `.some` take callbacks and are used
@@ -257,8 +259,8 @@ data flow instead.
 Two operators make nullable values concise:
 
 ```ts
-input.type ?? 'text'       // default only for null or undefined
-inputEls[id]?.value ?? ''  // stop safely if inputEls[id] is absent
+input.type ?? 'text'; // default only for null or undefined
+inputEls[id]?.value ?? ''; // stop safely if inputEls[id] is absent
 ```
 
 - `a?.b` is optional chaining. It evaluates to `undefined` rather than
@@ -319,7 +321,9 @@ class TankGameScene extends Phaser.Scene {
   state: TankGameState | undefined;
   endTurnText!: Phaser.GameObjects.Text;
 
-  override update() { /* ... */ }
+  override update() {
+    /* ... */
+  }
 }
 ```
 

@@ -68,13 +68,18 @@ export const buildRealtimeStressSchedule = (): RealtimeStressScheduleItem[] => {
   let phaseOffsetMs = 0;
 
   for (const phase of REALTIME_STRESS_PHASES) {
-    for (let phaseSequence = 0; phaseSequence < phase.expectedMessages; phaseSequence += 1) {
+    for (
+      let phaseSequence = 0;
+      phaseSequence < phase.expectedMessages;
+      phaseSequence += 1
+    ) {
       schedule.push({
         sequence,
         phaseIndex: phase.index,
         targetRate: phase.targetRate,
         dueOffsetMs:
-          phaseOffsetMs + (phaseSequence * phase.durationMs) / phase.expectedMessages,
+          phaseOffsetMs +
+          (phaseSequence * phase.durationMs) / phase.expectedMessages,
       });
       sequence += 1;
     }
@@ -246,7 +251,9 @@ export const currentRealtimeStressRate = (
   return count;
 };
 
-export const peakRealtimeStressRate = (receiptTimes: readonly number[]): number => {
+export const peakRealtimeStressRate = (
+  receiptTimes: readonly number[]
+): number => {
   let peak = 0;
   let left = 0;
   for (let right = 0; right < receiptTimes.length; right += 1) {
@@ -267,7 +274,9 @@ const rounded = (value: number): number => Math.round(value * 100) / 100;
 const spanMs = (times: readonly number[]): number => {
   const first = times[0];
   const last = times[times.length - 1];
-  return first === undefined || last === undefined ? 0 : Math.max(0, last - first);
+  return first === undefined || last === undefined
+    ? 0
+    : Math.max(0, last - first);
 };
 
 const perSecondHistogram = (times: readonly number[]): number[] => {
@@ -292,7 +301,11 @@ export const finalizeRealtimeStressStats = (
 ): RealtimeStressClientResult => {
   const failed = new Set(summary.failedSequences);
   let deliveryMissing = 0;
-  for (let sequence = 1; sequence <= REALTIME_STRESS_EXPECTED_MESSAGES; sequence += 1) {
+  for (
+    let sequence = 1;
+    sequence <= REALTIME_STRESS_EXPECTED_MESSAGES;
+    sequence += 1
+  ) {
     if (!failed.has(sequence) && !stats.receivedSequences.has(sequence)) {
       deliveryMissing += 1;
     }

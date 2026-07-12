@@ -260,8 +260,8 @@ const rejectAction = (
 });
 
 export const tankGameRouter = router({
-  snapshot: publicProcedure.query(
-    async (): Promise<TankSnapshot> => readSnapshot(requirePostId())
+  snapshot: publicProcedure.query(async (): Promise<TankSnapshot> =>
+    readSnapshot(requirePostId())
   ),
 
   updatesSince: publicProcedure

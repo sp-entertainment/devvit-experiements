@@ -1,10 +1,7 @@
 import { z } from 'zod';
 import { context, redis } from '@devvit/web/server';
 import { router, publicProcedure } from '../trpc';
-import {
-  sharedCanvasKey,
-  smoothMovementBallsKey,
-} from '../../shared/realtime';
+import { sharedCanvasKey, smoothMovementBallsKey } from '../../shared/realtime';
 
 const requirePostId = () => {
   if (!context.postId)

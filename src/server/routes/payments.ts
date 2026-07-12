@@ -11,8 +11,7 @@ type OrderRequest = {
 };
 
 type PaymentHandlerResponse =
-  | { success: true }
-  | { success: false; reason?: string };
+  { success: true } | { success: false; reason?: string };
 
 const entitlementKey = () => `entitlement:${context.userId ?? 'unknown'}`;
 

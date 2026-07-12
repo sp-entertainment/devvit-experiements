@@ -102,7 +102,9 @@ class SmoothMovementScene extends Phaser.Scene {
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       if (!this.joined || this.localMoving || this.moveInFlight) return;
       this.autoMoveTimer?.remove(false);
-      void this.requestMove(clampPoint({ x: pointer.worldX, y: pointer.worldY }));
+      void this.requestMove(
+        clampPoint({ x: pointer.worldX, y: pointer.worldY })
+      );
     });
 
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
@@ -202,7 +204,9 @@ class SmoothMovementScene extends Phaser.Scene {
       if (this.active) {
         this.moveInFlight = false;
         if (!this.localMoving) {
-          this.setStatus('Connected. Server-authoritative movement is running.');
+          this.setStatus(
+            'Connected. Server-authoritative movement is running.'
+          );
           this.scheduleAutoMove();
         }
       }
@@ -294,11 +298,16 @@ class SmoothMovementScene extends Phaser.Scene {
     ring.setVisible(isLocal);
 
     const label = this.add
-      .text(message.from.x, message.from.y + BALL_RADIUS + 10, message.username, {
-        fontFamily: 'Arial',
-        fontSize: 14,
-        color: isLocal ? '#ffffff' : '#cbd5e1',
-      })
+      .text(
+        message.from.x,
+        message.from.y + BALL_RADIUS + 10,
+        message.username,
+        {
+          fontFamily: 'Arial',
+          fontSize: 14,
+          color: isLocal ? '#ffffff' : '#cbd5e1',
+        }
+      )
       .setOrigin(0.5, 0);
 
     return {
@@ -355,7 +364,8 @@ class SmoothMovementScene extends Phaser.Scene {
       }
       for (const move of snapshot.moves) this.applyMove(move);
     } catch (error) {
-      if (this.active) console.error('Failed to refresh movement snapshot:', error);
+      if (this.active)
+        console.error('Failed to refresh movement snapshot:', error);
     }
   }
 

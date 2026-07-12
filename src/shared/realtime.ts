@@ -108,8 +108,7 @@ export const ballMovementDuration = (from: BallPoint, to: BallPoint) =>
     )
   );
 
-const sineEaseInOut = (value: number) =>
-  (1 - Math.cos(Math.PI * value)) / 2;
+const sineEaseInOut = (value: number) => (1 - Math.cos(Math.PI * value)) / 2;
 
 const pointBetween = (
   from: BallPoint,
@@ -159,8 +158,7 @@ export type RealtimeCanvasEraseMessage = {
 };
 
 export type RealtimeCanvasMessage =
-  | RealtimeCanvasPutMessage
-  | RealtimeCanvasEraseMessage;
+  RealtimeCanvasPutMessage | RealtimeCanvasEraseMessage;
 
 export type RealtimeMessage =
   | RealtimeCursorMessage

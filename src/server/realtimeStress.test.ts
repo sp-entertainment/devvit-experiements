@@ -72,31 +72,13 @@ void test('runner paces against absolute time and aggregates send rejections', a
     summary.phases.map((phase) => phase.rejected),
     [1, 1, 1, 1]
   );
-  assert.deepEqual(summary.sendsPerSecond, [
-    250,
-    250,
-    250,
-    250,
-    250,
-    0,
-    200,
-    200,
-    200,
-    200,
-    200,
-    0,
-    150,
-    150,
-    150,
-    150,
-    150,
-    0,
-    100,
-    100,
-    100,
-    100,
-    100,
-  ]);
+  assert.deepEqual(
+    summary.sendsPerSecond,
+    [
+      250, 250, 250, 250, 250, 0, 200, 200, 200, 200, 200, 0, 150, 150, 150,
+      150, 150, 0, 100, 100, 100, 100, 100,
+    ]
+  );
 });
 
 void test('client statistics distinguish duplicates, ordering, and delivery loss', () => {

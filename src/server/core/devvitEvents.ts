@@ -16,7 +16,8 @@ export type MenuKind = (typeof menuKinds)[number];
 type Summary = Record<string, string>;
 
 const triggerCountKey = (kind: TriggerKind) => `devvit-events:trigger:${kind}`;
-const triggerLastKey = (kind: TriggerKind) => `devvit-events:last-trigger:${kind}`;
+const triggerLastKey = (kind: TriggerKind) =>
+  `devvit-events:last-trigger:${kind}`;
 const menuCountKey = (kind: MenuKind) => `devvit-events:menu:${kind}`;
 const menuLastKey = (kind: MenuKind) => `devvit-events:last-menu:${kind}`;
 

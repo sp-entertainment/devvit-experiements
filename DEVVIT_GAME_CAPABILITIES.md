@@ -8,13 +8,13 @@ Devvit is Reddit's app platform for building interactive experiences that live i
 
 Two app models exist:
 
-| | **Devvit Blocks** (legacy) | **Devvit Web** (current, this project uses this) |
-|---|---|---|
-| UI | Custom JSX-like tags, Reddit design system | Any web stack (React, Phaser, Vue, vanilla JS/Canvas/WebGL) |
-| Runs in-feed | Yes, natively interactive | No — needs a tap to load an iframe |
-| Full-screen / "expanded" mode | No | Yes |
-| Sound, 3D, animation | None / very limited | Full HTML5 capability |
-| Complexity ceiling | Low — fine for a poll or button | High — real games |
+|                               | **Devvit Blocks** (legacy)                 | **Devvit Web** (current, this project uses this)            |
+| ----------------------------- | ------------------------------------------ | ----------------------------------------------------------- |
+| UI                            | Custom JSX-like tags, Reddit design system | Any web stack (React, Phaser, Vue, vanilla JS/Canvas/WebGL) |
+| Runs in-feed                  | Yes, natively interactive                  | No — needs a tap to load an iframe                          |
+| Full-screen / "expanded" mode | No                                         | Yes                                                         |
+| Sound, 3D, animation          | None / very limited                        | Full HTML5 capability                                       |
+| Complexity ceiling            | Low — fine for a poll or button            | High — real games                                           |
 
 **Devvit Web is the relevant model for building actual games.** An app has two entrypoints: a lightweight `splash.html` shown inline in the feed, and a `game.html` loaded into an "expanded" full-screen iframe when the user taps in.
 
@@ -42,6 +42,7 @@ There is **no direct WebSocket API**. Instead, Devvit provides a managed pub/sub
 - This is good enough for **cursor/position sync, chat, live leaderboard pushes, turn notifications** — not for high-frequency authoritative physics sync (expect discrete event delivery, not a tick-perfect socket).
 
 **Practical multiplayer paradigms that work well on Devvit:**
+
 1. **Asynchronous / persistent-world multiplayer** — every visitor to a post reads/writes shared Redis state (word chains, collaborative canvases like r/place clones, daily puzzles with shared leaderboards). This is the platform's sweet spot, and it's what Reddit's own "Building Community Games" guidance explicitly recommends ("embrace asynchronous play").
 2. **Semi-real-time small-group multiplayer** — a handful of concurrent players in one post synchronized via realtime channels + Redis (trivia races, simple `.io`-style position broadcasting, party games). Works, per community reports (e.g., HIVEMIND, MysteriX), but requires building reconciliation/interpolation yourself.
 3. **Competitive/leaderboard multiplayer** — not simultaneous at all; players compete asynchronously against a shared Redis sorted-set leaderboard (scores, speedruns, daily challenges). Extremely common and cheap to build.
@@ -51,11 +52,11 @@ What's explicitly **not** a good fit: hard real-time competitive action games ne
 
 ### Documented realtime limits
 
-| Limit | Value |
-|---|---|
-| Max message payload | **1 MB** |
-| Throughput | **100 messages/second** per installation |
-| Channel name charset | `[a-zA-Z0-9_]` only |
+| Limit                     | Value                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| Max message payload       | **1 MB**                                                                           |
+| Throughput                | **100 messages/second** per installation                                           |
+| Channel name charset      | `[a-zA-Z0-9_]` only                                                                |
 | Concurrency / latency SLA | Not documented — no presence API, no matchmaking, no explicit max concurrent users |
 
 Client → client messaging isn't possible directly; every message is relayed through your server's `realtime.send`.
@@ -70,19 +71,20 @@ A managed Redis-like key/value store, scoped per-install (with an opt-in `global
 
 ### Documented Redis limits
 
-| Limit | Value |
-|---|---|
-| Storage per installation | **500 MB** |
-| Max request size | **5 MB** |
-| Throughput | **40,000 commands/sec** per installation |
-| Concurrent transactions | **20** open blocks, **5s** execution timeout each |
-| `zRange` (BYSCORE/BYLEX) page size | capped at **1000** per call |
+| Limit                              | Value                                             |
+| ---------------------------------- | ------------------------------------------------- |
+| Storage per installation           | **500 MB**                                        |
+| Max request size                   | **5 MB**                                          |
+| Throughput                         | **40,000 commands/sec** per installation          |
+| Concurrent transactions            | **20** open blocks, **5s** execution timeout each |
+| `zRange` (BYSCORE/BYLEX) page size | capped at **1000** per call                       |
 
 Community reports additionally cite a **~500 KB single-value** practical ceiling for large blobs (an experimental `redisCompressed` variant gzip+base64-encodes large strings/hashes to help).
 
 ## 5. Reddit Platform Integration (`@devvit/reddit`, server-side)
 
 Because it runs on Reddit, an app's server can:
+
 - Create/edit/crosspost posts, read listings (hot/new/top/rising), attach arbitrary `postData` to a post (handy for storing per-post game config/state)
 - Read/submit comments, karma, user profiles, Snoovatar URLs
 - Take moderation actions (approve/remove/ban/flair/mod-notes/modmail) if granted moderator scope
@@ -103,14 +105,14 @@ Other server capabilities: **scheduler** (one-off and cron jobs via `scheduler.r
 
 Reddit's own best-practices docs point builders toward a specific design pattern rather than generic multiplayer:
 
-| Guidance | Detail |
-|---|---|
-| Async over sync | Explicitly recommended — works across time zones, lowers commitment |
-| Fun at N=1 | Design the solo loop first, layer on competition/leaderboards second |
-| Bite-sized loops | Seconds-to-fun, not long sessions |
-| Feed-native hook | Strong splash screen + clear call-to-action, since that's what most users see |
+| Guidance            | Detail                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Async over sync     | Explicitly recommended — works across time zones, lowers commitment                                           |
+| Fun at N=1          | Design the solo loop first, layer on competition/leaderboards second                                          |
+| Bite-sized loops    | Seconds-to-fun, not long sessions                                                                             |
+| Feed-native hook    | Strong splash screen + clear call-to-action, since that's what most users see                                 |
 | Retention mechanics | Streaks, missions, leaderboards (Redis sorted sets), subscribe-to-subreddit, opt-in push notifications (beta) |
-| Live sync | Prefer **realtime over polling** for things like live leaderboards; pair with Redis for durable state |
+| Live sync           | Prefer **realtime over polling** for things like live leaderboards; pair with Redis for durable state         |
 
 Additional documented request/response limits: Devvit Web server requests cap at **30s / 4 MB payload / 10 MB response**; per-post `postData` (lightweight state attached directly to a post) is capped at **2 KB** — bigger state belongs in Redis; the scheduler allows **10 live recurring jobs** per installation.
 
@@ -148,6 +150,7 @@ Additional documented request/response limits: Devvit Web server requests cap at
 ## 11. Best-Fit Game Genres
 
 **Strong fit:**
+
 - **Daily puzzle / word games** (Wordle-likes, trivia, guessing games) — async, leaderboard-driven, low bandwidth, matches Reddit's daily-ritual content pattern
 - **Community/collaborative canvases** (r/place-style shared world/pixel-art games) — plays directly to Reddit's crowd dynamics and persistent shared Redis state
 - **Casual leaderboard/score-attack games** (endless runners, arcade high-score chasers, simulators) — sorted sets make competitive ranking trivial
@@ -155,6 +158,7 @@ Additional documented request/response limits: Devvit Web server requests cap at
 - **Light "party game" style simultaneous multiplayer** for small groups (trivia races, quiz shows, social deduction) — realtime channels are sufficient at this scale
 
 **Weak fit:**
+
 - **Twitch-reflex competitive action** (fighting games, shooters, precision platformer PvP) — no true low-latency socket layer
 - **Large persistent MMO-style worlds** with complex relational data — Redis-only storage and value-size limits become a bottleneck
 - **Graphically heavy 3D / AAA-style games** — feasible technically (WebGL works), but splash-screen weight and feed-ranking penalties discourage large bundles

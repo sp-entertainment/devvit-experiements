@@ -28,7 +28,9 @@ const formatPart = (part: unknown): string => {
 
 const notifyClientError = (reason: unknown, fallbackMessage: string): void => {
   const message =
-    reason instanceof Error ? reason.message : String(reason || fallbackMessage);
+    reason instanceof Error
+      ? reason.message
+      : String(reason || fallbackMessage);
   const timestamp = Date.now();
   if (
     lastClientErrorToast?.message === message &&

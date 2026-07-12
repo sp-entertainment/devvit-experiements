@@ -24,11 +24,7 @@ export type PongSide = 'left' | 'right';
 export const PONG_SIDES: readonly PongSide[] = ['left', 'right'];
 export type PongAxis = -1 | 0 | 1;
 export type PongPhase =
-  | 'lobby'
-  | 'countdown'
-  | 'playing'
-  | 'paused'
-  | 'finished';
+  'lobby' | 'countdown' | 'playing' | 'paused' | 'finished';
 export type PongCountdownKind = 'match' | 'point' | 'resume';
 export type PongFinishReason = 'score' | 'forfeit' | null;
 
@@ -97,9 +93,7 @@ export type PongJoinResult = PongSnapshot & {
 };
 
 export type PongSyncRejectionReason =
-  | 'not-player'
-  | 'stale-match'
-  | 'stale-input';
+  'not-player' | 'stale-match' | 'stale-input';
 
 export type PongSyncAccepted = PongSnapshot & {
   accepted: true;

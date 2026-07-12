@@ -83,8 +83,17 @@ class LightingHallwayScene extends Phaser.Scene {
 
   private addTorch() {
     const torchX = HALLWAY_WIDTH / 2;
-    const torch = this.lights.addLight(torchX, TORCH_TOP, 250, 0xffb24c, 2.2, 92);
-    const glow = this.add.circle(torchX, TORCH_TOP, 11, 0xffc86e, 0.95).setDepth(5);
+    const torch = this.lights.addLight(
+      torchX,
+      TORCH_TOP,
+      250,
+      0xffb24c,
+      2.2,
+      92
+    );
+    const glow = this.add
+      .circle(torchX, TORCH_TOP, 11, 0xffc86e, 0.95)
+      .setDepth(5);
     const core = this.add.circle(torchX, TORCH_TOP, 4, 0xfff1bf, 1).setDepth(6);
 
     this.tweens.add({
