@@ -10,6 +10,23 @@ type AgentCommand = {
 };
 
 const format = (value: unknown) => JSON.stringify(value, null, 2);
+const activeRunStorageKey = 'devvit-experiments:agent-run-id';
+const runIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const readActiveRunId = (): string | undefined => {
+  const value = sessionStorage.getItem(activeRunStorageKey);
+  if (!value || !runIdPattern.test(value)) {
+    sessionStorage.removeItem(activeRunStorageKey);
+    return undefined;
+  }
+  return value;
+};
+
+const saveActiveRunId = (runId: string | undefined): void => {
+  if (runId) sessionStorage.setItem(activeRunStorageKey, runId);
+  else sessionStorage.removeItem(activeRunStorageKey);
+};
 
 export const buildAgentConsole = (container: HTMLElement) => {
   const expectedLabel = el('label', 'ks-row-field');
@@ -87,7 +104,7 @@ export const buildAgentConsole = (container: HTMLElement) => {
   const controls = el('div', 'ks-row-controls');
   controls.append(start, run, finishPassed, finishFailed, reset);
 
-  let runId: string | undefined;
+  let runId = readActiveRunId();
   let loadedCommands: AgentCommand[] = [];
 
   const selectedCommand = () =>
@@ -131,6 +148,7 @@ export const buildAgentConsole = (container: HTMLElement) => {
         if (!ready) throw new Error('Build freshness is not ready.');
         const result = await trpc.agent.startRun.mutate();
         runId = result.runId;
+        saveActiveRunId(runId);
         output.textContent = format(result);
       } catch (error) {
         output.classList.add('ks-output-error');
@@ -175,6 +193,10 @@ export const buildAgentConsole = (container: HTMLElement) => {
           runId,
           passed,
         });
+        if (result.status === 'passed') {
+          runId = undefined;
+          saveActiveRunId(undefined);
+        }
         output.classList.toggle('ks-output-error', result.status === 'failed');
         output.textContent = format(result);
       } catch (error) {
@@ -194,6 +216,8 @@ export const buildAgentConsole = (container: HTMLElement) => {
       setBusy(true);
       try {
         const result = await trpc.agent.resetRun.mutate({ runId });
+        runId = undefined;
+        saveActiveRunId(undefined);
         output.textContent = format(result);
       } catch (error) {
         output.classList.add('ks-output-error');
@@ -233,6 +257,15 @@ export const buildAgentConsole = (container: HTMLElement) => {
       }
       renderSelectedCommand();
       await Promise.all([refreshReadiness(), refreshFixture()]);
+      if (runId) {
+        try {
+          output.textContent = format(await trpc.agent.getRun.query({ runId }));
+        } catch {
+          runId = undefined;
+          saveActiveRunId(undefined);
+          output.textContent = '(start a run, then execute a command)';
+        }
+      }
     } catch (error) {
       output.classList.add('ks-output-error');
       output.textContent = `Unable to load agent commands: ${errorMessage(error)}`;
