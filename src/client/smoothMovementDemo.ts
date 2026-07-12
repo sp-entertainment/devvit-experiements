@@ -1,6 +1,5 @@
 import { showToast } from '@devvit/web/client';
 import * as Phaser from 'phaser';
-import { AUTO, Game } from 'phaser';
 import { onBallMoveMessage } from './realtimeChannel';
 import { traceClientLog } from './clientLogs';
 import { trpc } from './trpc';
@@ -398,7 +397,7 @@ class SmoothMovementScene extends Phaser.Scene {
 }
 
 const config: Phaser.Types.Core.GameConfig = {
-  type: AUTO,
+  type: Phaser.AUTO,
   audio: { noAudio: true },
   backgroundColor: '#101624',
   scale: {
@@ -410,12 +409,12 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [SmoothMovementScene],
 };
 
-let currentGame: Game | undefined;
+let currentGame: Phaser.Game | undefined;
 
-export const startSmoothMovementDemo = (parentId: string): Game => {
+export const startSmoothMovementDemo = (parentId: string): Phaser.Game => {
   traceClientLog('Starting smooth movement demo:', parentId);
   currentGame?.destroy(true);
-  currentGame = new Game({ ...config, parent: parentId });
+  currentGame = new Phaser.Game({ ...config, parent: parentId });
   console.info('Started smooth movement demo:', parentId);
   return currentGame;
 };

@@ -1,6 +1,5 @@
 import { showToast } from '@devvit/web/client';
 import * as Phaser from 'phaser';
-import { AUTO, Game } from 'phaser';
 import { onCanvasMessage } from './realtimeChannel';
 import { traceClientLog } from './clientLogs';
 import { trpc } from './trpc';
@@ -415,7 +414,7 @@ class SharedCanvasScene extends Phaser.Scene {
 const config = (
   controls: SharedCanvasControls
 ): Phaser.Types.Core.GameConfig => ({
-  type: AUTO,
+  type: Phaser.AUTO,
   audio: { noAudio: true },
   backgroundColor: '#0f1117',
   scale: {
@@ -427,15 +426,15 @@ const config = (
   scene: [new SharedCanvasScene(controls)],
 });
 
-let currentGame: Game | undefined;
+let currentGame: Phaser.Game | undefined;
 
 export const startSharedCanvasDemo = (
   parentId: string,
   controls: SharedCanvasControls = defaultControls
-): Game => {
+): Phaser.Game => {
   traceClientLog('Starting shared canvas demo:', parentId);
   currentGame?.destroy(true);
-  currentGame = new Game({ ...config(controls), parent: parentId });
+  currentGame = new Phaser.Game({ ...config(controls), parent: parentId });
   console.info('Started shared canvas demo:', parentId);
   return currentGame;
 };
