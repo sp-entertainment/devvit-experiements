@@ -14,7 +14,8 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   gap: 16px;
 }
@@ -73,7 +74,7 @@
   line-height: 1;
   border: none;
   padding: 6px 16px;
-  height: 28px;
+  min-height: 44px;
   font-size: 1.1em;
   border-radius: 12px;
   cursor: pointer;
@@ -92,7 +93,22 @@
 }
 
 .docs-link {
+  border: 0;
+  background: transparent;
+  color: #4b5563;
+  font: inherit;
+  padding: 4px;
   cursor: pointer;
+}
+
+.docs-link:hover {
+  color: #b02a00;
+  text-decoration: underline;
+}
+
+button:focus-visible {
+  outline: 3px solid #028af8;
+  outline-offset: 2px;
 }
 
 .divider {

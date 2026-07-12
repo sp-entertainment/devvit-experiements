@@ -31,6 +31,7 @@ title.textContent = 'Devvit Kitchen Sink';
 
 const tabs = document.createElement('nav');
 tabs.id = 'ks-tabs';
+tabs.setAttribute('aria-label', 'Example categories');
 
 header.append(title, tabs);
 
@@ -49,6 +50,10 @@ const updateTabState = (activeCategoryId: string) => {
     button.classList.toggle(
       'ks-tab-active',
       button.dataset.categoryId === activeCategoryId
+    );
+    button.setAttribute(
+      'aria-pressed',
+      String(button.dataset.categoryId === activeCategoryId)
     );
     button.classList.toggle('ks-tab-error', hasErrors);
     button.setAttribute(

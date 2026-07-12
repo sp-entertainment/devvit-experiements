@@ -21,9 +21,13 @@ export const buildAgentConsole = (container: HTMLElement) => {
   expectedLabel.append(expectedText, expected);
 
   const readiness = el('p', 'ks-status');
+  readiness.setAttribute('role', 'status');
+  readiness.setAttribute('aria-live', 'polite');
   readiness.dataset.testid = 'agent-readiness';
   readiness.textContent = `Checking client ${buildId} against the deployed server…`;
   const fixture = el('p', 'ks-status');
+  fixture.setAttribute('role', 'status');
+  fixture.setAttribute('aria-live', 'polite');
   fixture.dataset.testid = 'agent-fixture-status';
   fixture.textContent =
     'Checking whether this is the registered agent fixture…';

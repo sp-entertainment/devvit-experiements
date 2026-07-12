@@ -1,19 +1,26 @@
-import { navigateTo, context, requestExpandedMode } from '@devvit/web/client';
+import { context, navigateTo, requestExpandedMode } from '@devvit/web/client';
 import { buildId } from '../shared/buildInfo';
 
+const requireButton = (id: string): HTMLButtonElement => {
+  const element = document.getElementById(id);
+  if (!(element instanceof HTMLButtonElement)) {
+    throw new Error(`#${id} must be a button`);
+  }
+  return element;
+};
+
 const version = document.getElementById('app-version');
-if (version)
+if (version) {
   version.textContent = `app v${context.appVersion} | build ${buildId}`;
+}
 
-const docsLink = document.getElementById('docs-link') as HTMLDivElement;
-const playtestLink = document.getElementById('playtest-link') as HTMLDivElement;
-const discordLink = document.getElementById('discord-link') as HTMLDivElement;
-const startButton = document.getElementById(
-  'start-button'
-) as HTMLButtonElement;
+const startButton = requireButton('start-button');
+const docsLink = requireButton('docs-link');
+const playtestLink = requireButton('playtest-link');
+const discordLink = requireButton('discord-link');
 
-startButton.addEventListener('click', (e) => {
-  requestExpandedMode(e, 'game');
+startButton.addEventListener('click', (event) => {
+  requestExpandedMode(event, 'game');
 });
 
 docsLink.addEventListener('click', () => {
@@ -28,10 +35,8 @@ discordLink.addEventListener('click', () => {
   navigateTo('https://discord.com/invite/R7yu2wh9Qz');
 });
 
-const titleElement = document.getElementById('title') as HTMLHeadingElement;
-
-function init() {
-  titleElement.textContent = `Hey ${context.username ?? 'user'} 👋`;
+const titleElement = document.getElementById('title');
+if (!(titleElement instanceof HTMLHeadingElement)) {
+  throw new Error('#title must be a heading');
 }
-
-init();
+titleElement.textContent = `Hey ${context.username ?? 'there'} 👋`;
