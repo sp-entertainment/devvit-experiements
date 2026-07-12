@@ -34,6 +34,11 @@ import {
   tankFacing,
 } from '../tankGameRules';
 import { authenticatedProcedure, publicProcedure, router } from '../trpc';
+import {
+  isRedisTransactionConflict,
+  redisTransactionConflictError,
+  retryRedisTransaction,
+} from '../redisTransactionRetry';
 
 const tankPointSchema = z.object({
   x: z
@@ -173,51 +178,56 @@ const broadcastState = async (postId: string, state: TankGameState) => {
 const mutateState = async <T>(
   postId: string,
   mutate: (state: TankGameState) => StateMutationDecision<T>
-): Promise<StateMutationResult<T>> => {
-  const key = tankGameKey(postId);
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+): Promise<StateMutationResult<T>> =>
+  retryRedisTransaction(async () => {
+    const key = tankGameKey(postId);
     const updatesKey = tankGameUpdatesKey(postId);
     const transaction = await redis.watch(key, updatesKey);
-    const current = parseState(await redis.get(key));
-    let decision: StateMutationDecision<T>;
-
+    let multiStarted = false;
     try {
-      decision = mutate(current);
-    } catch (error) {
-      await transaction.unwatch();
-      throw error;
-    }
+      const current = parseState(await redis.get(key));
+      const decision = mutate(current);
 
-    if (!decision.changed) {
-      await transaction.unwatch();
-      return { state: current, value: decision.value };
-    }
+      if (!decision.changed) {
+        await transaction.unwatch();
+        return { state: current, value: decision.value };
+      }
 
-    const next: TankGameState = {
-      ...decision.state,
-      version: current.version + 1,
-    };
-    await transaction.multi();
-    await transaction.set(key, JSON.stringify(next));
-    await transaction.zAdd(updatesKey, {
-      member: JSON.stringify(next),
-      score: next.version,
-    });
-    await transaction.zRemRangeByRank(
-      updatesKey,
-      0,
-      -(TANK_UPDATE_LOG_LIMIT + 1)
-    );
-    const result = await transaction.exec();
-    if (result.length > 0) {
+      const next: TankGameState = {
+        ...decision.state,
+        version: current.version + 1,
+      };
+      await transaction.multi();
+      multiStarted = true;
+      await transaction.set(key, JSON.stringify(next));
+      await transaction.zAdd(updatesKey, {
+        member: JSON.stringify(next),
+        score: next.version,
+      });
+      await transaction.zRemRangeByRank(
+        updatesKey,
+        0,
+        -(TANK_UPDATE_LOG_LIMIT + 1)
+      );
+      const result = await transaction.exec();
+      if (result.length === 0) throw redisTransactionConflictError();
       await broadcastState(postId, next);
       return { state: next, value: decision.value };
+    } catch (error) {
+      try {
+        if (multiStarted) await transaction.discard();
+        else await transaction.unwatch();
+      } catch (cleanupError) {
+        if (!isRedisTransactionConflict(error)) {
+          console.debug(
+            'Unable to clean up the tank game Redis transaction:',
+            cleanupError
+          );
+        }
+      }
+      throw error;
     }
-  }
-
-  throw new Error('Tank game state conflicted; retry');
-};
+  });
 
 const readSnapshot = async (postId: string): Promise<TankSnapshot> => ({
   state: parseState(await redis.get(tankGameKey(postId))),

@@ -6,6 +6,11 @@ import {
   publicProcedure,
   router,
 } from '../trpc';
+import {
+  isRedisTransactionConflict,
+  redisTransactionConflictError,
+  retryRedisTransaction,
+} from '../redisTransactionRetry';
 import { sharedCanvasKey, smoothMovementBallsKey } from '../../shared/realtime';
 
 const requirePostId = () => {
@@ -166,13 +171,33 @@ export const redisRouter = router({
   transactionDemo: router({
     increment: publicProcedure.mutation(async () => {
       const key = `txn-counter:${requirePostId()}`;
-      const txn = await redis.watch(key);
-      const current = await redis.get(key);
-      const next = (current ? parseInt(current) : 0) + 1;
-      await txn.multi();
-      await txn.set(key, String(next));
-      await txn.exec();
-      return { count: next };
+      return await retryRedisTransaction(async () => {
+        const transaction = await redis.watch(key);
+        let multiStarted = false;
+        try {
+          const current = await redis.get(key);
+          const next = (current ? parseInt(current) : 0) + 1;
+          await transaction.multi();
+          multiStarted = true;
+          await transaction.set(key, String(next));
+          const result = await transaction.exec();
+          if (result.length === 0) throw redisTransactionConflictError();
+          return { count: next };
+        } catch (error) {
+          try {
+            if (multiStarted) await transaction.discard();
+            else await transaction.unwatch();
+          } catch (cleanupError) {
+            if (!isRedisTransactionConflict(error)) {
+              console.debug(
+                'Unable to clean up the Redis transaction demo:',
+                cleanupError
+              );
+            }
+          }
+          throw error;
+        }
+      });
     }),
   }),
 
