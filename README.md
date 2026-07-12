@@ -2,7 +2,7 @@
 
 Deployable "kitchen sink" that exercises nearly every Devvit Web capability (Reddit API, Redis, Realtime, Media, Notifications, Payments, Scheduler, Settings, Cache, Forms, Menu Items, Triggers, and client-side effects), organized behind a tRPC API and a categorized in-app menu, each example commented to explain what it demonstrates.
 
-A starter to build web applications on Reddit's developer platform
+A practice project for building web applications on Reddit's developer platform.
 
 - [Devvit](https://developers.reddit.com/): A way to build and deploy immersive games on Reddit
 - [Vite](https://vite.dev/): For compiling the webView
@@ -10,22 +10,37 @@ A starter to build web applications on Reddit's developer platform
 - [Hono](https://hono.dev/): For backend logic
 - [TypeScript](https://www.typescriptlang.org/): For type safety
 
-## Getting Started
+## Getting started
 
-> Make sure you have Node 22 downloaded on your machine before running!
+Prerequisites:
 
-1. Run `npm create devvit@latest --template=phaser`
-2. Go through the installation wizard. You will need to create a Reddit account and connect it to Reddit developers
-3. Copy the command on the success page into your terminal
+- Node.js 22.2.0 or newer
+- A Reddit account with access to the Devvit app
+
+From a clone of this repository:
+
+1. Run `npm ci` to install the locked dependency versions.
+2. Run `npm run agent:check` to verify formatting, linting, types, and unit tests.
+3. Run `npm run login` if the Devvit CLI is not already authenticated.
+4. Run `npm run dev` to upload a playtest build and open it on Reddit.
 
 ## Commands
 
-- `npm run dev`: Starts a development server where you can develop your application live on Reddit.
-- `npm run build`: Builds your client and server projects
-- `npm run deploy`: Uploads a new version of your app
-- `npm run launch`: Publishes your app for review
-- `npm run login`: Logs your CLI into Reddit
-- `npm run type-check`: Type checks the client, server, and shared code
+- `npm run agent:check`: Runs the complete deterministic local quality gate.
+- `npm run build`: Builds the client and server deployment artifacts.
+- `npm run deploy`: Checks and uploads a new app version.
+- `npm run dev`: Starts a live Devvit playtest.
+- `npm run format:check`: Checks repository formatting without changing files.
+- `npm run launch`: Checks, uploads, and submits the app for review.
+- `npm run lint`: Checks first-party TypeScript with ESLint.
+- `npm run login`: Authenticates the local Devvit CLI.
+- `npm run prettier`: Formats first-party repository files.
+- `npm run test:unit`: Type-checks and runs the server and tooling tests.
+- `npm run type-check`: Type-checks the client, server, and shared code.
+
+Live validation is intentionally separate because it uploads a playtest build and is
+slower than the deterministic local gate. Use it for changes that affect runtime
+behavior.
 
 ## Agent live validation
 
