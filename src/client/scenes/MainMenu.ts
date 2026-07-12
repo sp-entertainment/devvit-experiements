@@ -5,6 +5,8 @@ export class MainMenu extends Scene {
   logo: GameObjects.Image | null = null;
   title: GameObjects.Text | null = null;
 
+  private readonly handleResize = (): void => this.refreshLayout();
+
   constructor() {
     super('MainMenu');
   }
@@ -24,7 +26,10 @@ export class MainMenu extends Scene {
     this.refreshLayout();
 
     // Re-calculate positions whenever the game canvas is resized (e.g. orientation change).
-    this.scale.on('resize', () => this.refreshLayout());
+    this.scale.on('resize', this.handleResize);
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', this.handleResize);
+    });
 
     this.input.once('pointerdown', () => {
       this.scene.start('Game');
@@ -42,23 +47,23 @@ export class MainMenu extends Scene {
     this.cameras.resize(width, height);
 
     // Background – stretch to fill the whole canvas
-    if (!this.background) {
-      this.background = this.add.image(0, 0, 'background').setOrigin(0);
-    }
-    this.background!.setDisplaySize(width, height);
+    const background =
+      this.background ?? this.add.image(0, 0, 'background').setOrigin(0);
+    this.background = background;
+    background.setDisplaySize(width, height);
 
     // Logo – keep aspect but scale down for very small screens
     const scaleFactor = Math.min(width / 1024, height / 768);
 
-    if (!this.logo) {
-      this.logo = this.add.image(0, 0, 'logo');
-    }
-    this.logo!.setPosition(width / 2, height * 0.38).setScale(scaleFactor);
+    const logo = this.logo ?? this.add.image(0, 0, 'logo');
+    this.logo = logo;
+    logo.setPosition(width / 2, height * 0.38).setScale(scaleFactor);
 
     // Title text – create once, then scale on resize
     const baseFontSize = 38;
-    if (!this.title) {
-      this.title = this.add
+    const title =
+      this.title ??
+      this.add
         .text(0, 0, 'Main Menu', {
           fontFamily: 'Arial Black',
           fontSize: `${baseFontSize}px`,
@@ -68,8 +73,8 @@ export class MainMenu extends Scene {
           align: 'center',
         })
         .setOrigin(0.5);
-    }
-    this.title!.setPosition(width / 2, height * 0.6);
-    this.title!.setScale(scaleFactor);
+    this.title = title;
+    title.setPosition(width / 2, height * 0.6);
+    title.setScale(scaleFactor);
   }
 }
