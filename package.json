@@ -33,7 +33,7 @@
     "@hono/trpc-server": "^0.4.0",
     "@trpc/client": "^11.4.2",
     "@trpc/server": "^11.4.2",
-    "hono": "4.12.28",
+    "hono": "4.12.29",
     "phaser": "4.2.0",
     "zod": "^3.24.1"
   },
