@@ -56,7 +56,7 @@ type MoveEvent = {
   from: { x: number; y: number };
   to: { x: number; y: number };
   durationMs: number; // how long the walk animation should take
-  seq: number;         // per-character monotonic counter
+  seq: number; // per-character monotonic counter
 };
 ```
 
@@ -83,7 +83,7 @@ This is a natural fit for **tile/grid-based movement** (mazes, room-based games)
 inherently discrete (tile A → tile B), so one event per step is sufficient, and `durationMs` can
 match the walk-cycle animation length exactly.
 
-**No clock synchronization is needed.** Because you send a *duration* rather than an absolute
+**No clock synchronization is needed.** Because you send a _duration_ rather than an absolute
 timestamp, the client just starts the tween on receipt. (Only add a server timestamp if you want
 to compensate for an unusually late-arriving message by shortening the remaining tween.)
 
@@ -110,7 +110,12 @@ async function handleMove(dir: Direction) {
 
   const durationMs = 250; // matches walk-cycle length
   await realtime.send(postId, {
-    type: 'move', playerId, from: state.pos, to, durationMs, seq,
+    type: 'move',
+    playerId,
+    from: state.pos,
+    to,
+    durationMs,
+    seq,
   });
 
   return { accepted: true, to, durationMs };
@@ -156,15 +161,15 @@ effect. This keeps all game logic server-side; clients are just replaying "thing
 
 ## 5. Robustness details specific to this transport
 
-| Concern | Mitigation |
-|---|---|
+| Concern                                                                             | Mitigation                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Late joiners get no message history (`connectRealtime` only delivers future events) | Add `GET /api/state` returning the full authoritative snapshot (all character positions/facings, door/item state) for initial render, then subscribe to `realtime` for deltas |
-| No documented ordering/delivery guarantees | Tag every event with a monotonic `seq` (per character or global tick); clients drop stale/duplicate/out-of-order events |
-| Chattiness / undocumented rate limits | Batch same-tick updates into one message, e.g. `{ type: 'tick', moves: [...] }`, instead of one `realtime.send` per character |
-| Message arrives very late | Optional: include a server timestamp and shorten the remaining tween duration to "catch up" instead of playing the full animation late |
-| User opens multiple tabs | Use one `playerId` per Reddit user; each tab observes/controls the same authoritative ball |
-| Client sends forged identity | Ignore it: derive `playerId` from `context.userId` on the server |
-| Client route is destroyed while requests are in flight | Scene shutdown sets an inactive flag; async tRPC/realtime callbacks check it before touching Phaser objects |
+| No documented ordering/delivery guarantees                                          | Tag every event with a monotonic `seq` (per character or global tick); clients drop stale/duplicate/out-of-order events                                                       |
+| Chattiness / undocumented rate limits                                               | Batch same-tick updates into one message, e.g. `{ type: 'tick', moves: [...] }`, instead of one `realtime.send` per character                                                 |
+| Message arrives very late                                                           | Optional: include a server timestamp and shorten the remaining tween duration to "catch up" instead of playing the full animation late                                        |
+| User opens multiple tabs                                                            | Use one `playerId` per Reddit user; each tab observes/controls the same authoritative ball                                                                                    |
+| Client sends forged identity                                                        | Ignore it: derive `playerId` from `context.userId` on the server                                                                                                              |
+| Client route is destroyed while requests are in flight                              | Scene shutdown sets an inactive flag; async tRPC/realtime callbacks check it before touching Phaser objects                                                                   |
 
 ## Summary checklist for implementing a new networked character/interaction
 

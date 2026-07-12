@@ -158,7 +158,8 @@ class SharedCanvasScene extends Phaser.Scene {
 
     const ids = new Set(items.map((item) => item.id));
     for (const [id, view] of this.items) {
-      if (!ids.has(id) && view.item.updatedAt <= requestedAt) this.applyErase([id]);
+      if (!ids.has(id) && view.item.updatedAt <= requestedAt)
+        this.applyErase([id]);
     }
     for (const item of items) this.applyPut(item);
   }
@@ -184,8 +185,16 @@ class SharedCanvasScene extends Phaser.Scene {
   paintPixel(x: number, y: number) {
     if (!this.active) return;
 
-    const col = clamp(Math.floor(x / CANVAS_CELL_SIZE), 0, CANVAS_GRID_COLS - 1);
-    const row = clamp(Math.floor(y / CANVAS_CELL_SIZE), 0, CANVAS_GRID_ROWS - 1);
+    const col = clamp(
+      Math.floor(x / CANVAS_CELL_SIZE),
+      0,
+      CANVAS_GRID_COLS - 1
+    );
+    const row = clamp(
+      Math.floor(y / CANVAS_CELL_SIZE),
+      0,
+      CANVAS_GRID_ROWS - 1
+    );
     const key = `${col}:${row}`;
     if (this.paintedThisDrag.has(key)) return;
     this.paintedThisDrag.add(key);

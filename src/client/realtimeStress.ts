@@ -191,7 +191,8 @@ export const startRealtimeStressTab = (
           ]
         : [
             `${participant.username} (${shortClient(participant.clientId)})`,
-            latestSnapshot.status === 'completed' || latestSnapshot.status === 'failed'
+            latestSnapshot.status === 'completed' ||
+            latestSnapshot.status === 'failed'
               ? 'Reporting…'
               : '—',
             '—',
@@ -229,9 +230,10 @@ export const startRealtimeStressTab = (
       liveOutput.textContent =
         latestSnapshot.status === 'running'
           ? 'Waiting for the first stress-test message…'
-          : latestSnapshot.status === 'completed' || latestSnapshot.status === 'failed'
+          : latestSnapshot.status === 'completed' ||
+              latestSnapshot.status === 'failed'
             ? '(local measurements are unavailable after remount; see shared results)'
-          : '(no active run)';
+            : '(no active run)';
       return;
     }
 
@@ -297,7 +299,8 @@ export const startRealtimeStressTab = (
       (participant) => participant.clientId === clientId && participant.ready
     );
     ready = joined;
-    const stateLabel = latestSnapshot.status[0]?.toUpperCase() + latestSnapshot.status.slice(1);
+    const stateLabel =
+      latestSnapshot.status[0]?.toUpperCase() + latestSnapshot.status.slice(1);
     status.textContent = `${stateLabel} · ${latestSnapshot.readyCount} ready · ${latestSnapshot.pendingCount} connecting`;
     joinButton.disabled =
       joining ||
@@ -310,7 +313,8 @@ export const startRealtimeStressTab = (
       latestSnapshot.readyCount < 1 ||
       latestSnapshot.pendingCount > 0;
     resetButton.disabled =
-      latestSnapshot.status !== 'completed' && latestSnapshot.status !== 'failed';
+      latestSnapshot.status !== 'completed' &&
+      latestSnapshot.status !== 'failed';
     renderParticipants();
     renderResults();
     renderLive();
@@ -353,7 +357,8 @@ export const startRealtimeStressTab = (
     } catch (error) {
       submittedRunIds.delete(summary.runId);
       console.error('Failed to submit Realtime stress-test result:', error);
-      if (!destroyed) showToast(`Result submission failed: ${errorMessage(error)}`);
+      if (!destroyed)
+        showToast(`Result submission failed: ${errorMessage(error)}`);
     }
   };
 
@@ -362,7 +367,8 @@ export const startRealtimeStressTab = (
     if (!summary || submittedRunIds.has(summary.runId) || finalizeTimer) return;
     if (
       latestSnapshot.results.some(
-        (result) => result.clientId === clientId && result.runId === summary.runId
+        (result) =>
+          result.clientId === clientId && result.runId === summary.runId
       )
     ) {
       submittedRunIds.add(summary.runId);
@@ -407,7 +413,8 @@ export const startRealtimeStressTab = (
       }
       latestSnapshot = nextSnapshot;
       if (
-        (latestSnapshot.status === 'completed' || latestSnapshot.status === 'failed') &&
+        (latestSnapshot.status === 'completed' ||
+          latestSnapshot.status === 'failed') &&
         latestSnapshot.summary
       ) {
         scheduleFinalResult();
@@ -444,7 +451,10 @@ export const startRealtimeStressTab = (
                 ready = true;
                 render();
               } catch (error) {
-                console.error('Failed to mark stress-test client ready:', error);
+                console.error(
+                  'Failed to mark stress-test client ready:',
+                  error
+                );
                 showToast(`Join failed: ${errorMessage(error)}`);
               }
             })();
@@ -461,7 +471,10 @@ export const startRealtimeStressTab = (
                 .mutate({ clientId, lobbyId: joinedLobbyId })
                 .then(() => pollStatus())
                 .catch((error) =>
-                  console.debug('Unable to leave disconnected stress client:', error)
+                  console.debug(
+                    'Unable to leave disconnected stress client:',
+                    error
+                  )
                 );
             }
             render();
@@ -534,7 +547,9 @@ export const startRealtimeStressTab = (
     if (joinedLobbyId && latestSnapshot.status === 'idle') {
       void trpc.realtimeStress.leave
         .mutate({ clientId, lobbyId: joinedLobbyId })
-        .catch((error) => console.debug('Unable to leave stress-test lobby:', error));
+        .catch((error) =>
+          console.debug('Unable to leave stress-test lobby:', error)
+        );
     }
   };
 };

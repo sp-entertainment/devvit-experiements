@@ -181,13 +181,14 @@ export const redditRouter = router({
       .input(z.object({ limit: z.number().int().min(1).max(10).default(3) }))
       .query(async ({ input }) => {
         const base = listingOptions(input.limit);
-        const [hot, newest, rising, topDay, controversialDay] = await Promise.all([
-          reddit.getHotPosts(base).all(),
-          reddit.getNewPosts(base).all(),
-          reddit.getRisingPosts(base).all(),
-          reddit.getTopPosts({ ...base, timeframe: 'day' }).all(),
-          reddit.getControversialPosts({ ...base, timeframe: 'day' }).all(),
-        ]);
+        const [hot, newest, rising, topDay, controversialDay] =
+          await Promise.all([
+            reddit.getHotPosts(base).all(),
+            reddit.getNewPosts(base).all(),
+            reddit.getRisingPosts(base).all(),
+            reddit.getTopPosts({ ...base, timeframe: 'day' }).all(),
+            reddit.getControversialPosts({ ...base, timeframe: 'day' }).all(),
+          ]);
         return {
           hot: hot.map(summarizePost),
           new: newest.map(summarizePost),
@@ -251,7 +252,7 @@ export const redditRouter = router({
       },
     });
     return { id: post.id, url: post.permalink, title: post.title };
-    }),
+  }),
 
   userActions: router({
     // User Action scopes let this run as the viewer instead of the app account.
@@ -267,9 +268,7 @@ export const redditRouter = router({
             .string()
             .min(1)
             .max(4000)
-            .default(
-              'Created from a Devvit kitchen-sink runAs: USER example.'
-            ),
+            .default('Created from a Devvit kitchen-sink runAs: USER example.'),
         })
       )
       .mutation(async ({ input }) => {

@@ -19,7 +19,8 @@ const errorMessage = (error: unknown) =>
 
 const short = (value: string | undefined) => (value ?? '').slice(0, 80);
 
-const userName = (user: { name: string } | undefined) => user?.name ?? 'unknown';
+const userName = (user: { name: string } | undefined) =>
+  user?.name ?? 'unknown';
 
 const subredditName = (subreddit: { name: string } | undefined) =>
   subreddit?.name ?? context.subredditName ?? 'unknown';

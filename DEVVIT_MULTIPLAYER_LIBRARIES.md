@@ -4,18 +4,18 @@ Follow-up research to `DEVVIT_GAME_CAPABILITIES.md`, focused on whether existing
 
 ## 1. Community Libraries Built On Devvit
 
-| Library | What it does | Verdict |
-|---|---|---|
+| Library                                                          | What it does                                                                                                                                   | Verdict                                                                                                                                                                                                              |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **[`devvit-state`](https://github.com/foreverest/devvit-state)** | Zod-typed, versioned JSON state with Redis transactions (`watch`/`multi`/`exec`) and Realtime broadcast + patch-log replay for missed messages | Solves a real gap (Realtime is lossy — can drop/dedupe/reorder), but pinned to a narrow `@devvit/web` version range (`>=0.12.0-0 <0.13.0`), single maintainer, 0 stars, released May 2026. **Not adopted** — see §3. |
-| **[`devvit-phaser`](https://github.com/fizx/devvit-phaser)** | `SyncedDataManager`/`DataManagerServer` — Phaser `DataManager` subclass synced via Redis + broadcasts | Targets `@devvit/public-api` (legacy Blocks model), not `@devvit/web`. Would need porting. Not usable as-is. |
-| **[`devvit-hub`](https://github.com/fizx/devvit-hub)** | `BasicGameServer` — auto pub-sub per post, synced timers, less server boilerplate | Stale (last push Dec 2024), also pre-dates current `@devvit/web` API. |
-| **[`@devvit/kit`](https://github.com/reddit/devvit-kit)** | Official Reddit helper: UI components (columns, pagination), dev toolbar | UI-only, not multiplayer-related, mostly Blocks-era. |
+| **[`devvit-phaser`](https://github.com/fizx/devvit-phaser)**     | `SyncedDataManager`/`DataManagerServer` — Phaser `DataManager` subclass synced via Redis + broadcasts                                          | Targets `@devvit/public-api` (legacy Blocks model), not `@devvit/web`. Would need porting. Not usable as-is.                                                                                                         |
+| **[`devvit-hub`](https://github.com/fizx/devvit-hub)**           | `BasicGameServer` — auto pub-sub per post, synced timers, less server boilerplate                                                              | Stale (last push Dec 2024), also pre-dates current `@devvit/web` API.                                                                                                                                                |
+| **[`@devvit/kit`](https://github.com/reddit/devvit-kit)**        | Official Reddit helper: UI components (columns, pagination), dev toolbar                                                                       | UI-only, not multiplayer-related, mostly Blocks-era.                                                                                                                                                                 |
 
 **Ecosystem read:** thin, unofficial, low-adoption. No "standard" library has emerged yet — every real project (including Reddit's own template repos) just hand-writes a small Redis service class.
 
 ## 2. Generic Node.js Multiplayer Frameworks Don't Apply
 
-Colyseus, Rivalis, Nakama, Asobi, etc. are excellent for *traditional* multiplayer servers but **cannot run inside Devvit's backend**:
+Colyseus, Rivalis, Nakama, Asobi, etc. are excellent for _traditional_ multiplayer servers but **cannot run inside Devvit's backend**:
 
 - Devvit's server is stateless serverless functions — no long-lived process to hold open raw WebSocket connections
 - Devvit's Realtime is a proprietary pub/sub layer (1 MB/msg, 100 msg/s), not a raw socket
@@ -34,12 +34,12 @@ Checked `refs/devvit/packages/redis/src/types/redis.ts` directly: `@devvit/redis
 
 This rules out nearly every popular Redis wrapper:
 
-| Library | Blocker |
-|---|---|
-| BullMQ | Job atomicity relies on Lua scripts (`defineCommand`) |
-| Redis OM (official Redis Inc. object mapper) | Needs `FT.SEARCH`/RediSearch module |
-| cache-manager / keyv-redis | Expects a raw client instance to wrap |
-| RateLimiterRedis (rate-limiter-flexible) | Requires `EVAL`/`EVALSHA` permissions |
+| Library                                      | Blocker                                               |
+| -------------------------------------------- | ----------------------------------------------------- |
+| BullMQ                                       | Job atomicity relies on Lua scripts (`defineCommand`) |
+| Redis OM (official Redis Inc. object mapper) | Needs `FT.SEARCH`/RediSearch module                   |
+| cache-manager / keyv-redis                   | Expects a raw client instance to wrap                 |
+| RateLimiterRedis (rate-limiter-flexible)     | Requires `EVAL`/`EVALSHA` permissions                 |
 
 Partial exception: `RateLimiterRedisNonAtomic` avoids Lua (plain get/set/incr) but still expects an ioredis-shaped client — would need a thin manual adapter, not a drop-in.
 

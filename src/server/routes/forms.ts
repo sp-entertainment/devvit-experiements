@@ -49,5 +49,8 @@ forms.post('/rich-submit', async (c) => {
 
 forms.onError((error, c) => {
   console.error('Form route failed:', error);
-  return c.json<UiResponse>({ showToast: `Form error: ${errorMessage(error)}` }, 200);
+  return c.json<UiResponse>(
+    { showToast: `Form error: ${errorMessage(error)}` },
+    200
+  );
 });

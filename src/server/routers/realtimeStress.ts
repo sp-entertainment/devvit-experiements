@@ -35,7 +35,11 @@ const participantSchema = z.object({
 });
 
 const phaseSummarySchema = z.object({
-  phaseIndex: z.number().int().min(0).max(REALTIME_STRESS_PHASES.length - 1),
+  phaseIndex: z
+    .number()
+    .int()
+    .min(0)
+    .max(REALTIME_STRESS_PHASES.length - 1),
   targetRate: z.number().int().positive(),
   attempted: z.number().int().nonnegative(),
   succeeded: z.number().int().nonnegative(),
@@ -68,7 +72,11 @@ const serverSummarySchema = z.object({
 });
 
 const clientPhaseResultSchema = z.object({
-  phaseIndex: z.number().int().min(0).max(REALTIME_STRESS_PHASES.length - 1),
+  phaseIndex: z
+    .number()
+    .int()
+    .min(0)
+    .max(REALTIME_STRESS_PHASES.length - 1),
   targetRate: z.number().int().positive(),
   received: z.number().int().min(0).max(REALTIME_STRESS_EXPECTED_MESSAGES),
   averageMessagesPerSecond: z.number().min(0).max(10_000),
@@ -136,7 +144,8 @@ type LobbyMutation<T> = (
 ) => { state: LobbyState; value: T };
 
 const requirePostId = (): string => {
-  if (!context.postId) throw new Error('postId is required but missing from context');
+  if (!context.postId)
+    throw new Error('postId is required but missing from context');
   return context.postId;
 };
 
@@ -145,7 +154,8 @@ const requireUsername = (): string => {
   return context.username;
 };
 
-const lobbyKey = (postId: string): string => `realtime-stress:v2:lobby:${postId}`;
+const lobbyKey = (postId: string): string =>
+  `realtime-stress:v2:lobby:${postId}`;
 
 const newChannel = (): string =>
   `realtime_stress_${randomUUID().replaceAll('-', '_')}`;
@@ -193,7 +203,10 @@ const mutateLobby = async <T>(
         else await transaction.unwatch();
       } catch (cleanupError) {
         if (!isRedisTransactionConflict(error)) {
-          console.debug('Unable to clean up stress-test transaction:', cleanupError);
+          console.debug(
+            'Unable to clean up stress-test transaction:',
+            cleanupError
+          );
         }
       }
       throw error;
@@ -236,7 +249,8 @@ const snapshot = (
     lobbyId: state.lobbyId,
     participants,
     readyCount: participants.filter((participant) => participant.ready).length,
-    pendingCount: participants.filter((participant) => !participant.ready).length,
+    pendingCount: participants.filter((participant) => !participant.ready)
+      .length,
     runId: state.run?.runId ?? null,
     startedAt: state.run?.startedAt ?? null,
     endsAt: state.run?.endsAt ?? null,
@@ -248,7 +262,8 @@ const snapshot = (
   };
 };
 
-const lockValue = (postId: string, runId: string): string => `${postId}|${runId}`;
+const lockValue = (postId: string, runId: string): string =>
+  `${postId}|${runId}`;
 
 const releaseActiveLock = async (expectedValue: string): Promise<void> => {
   await retryRedisTransaction(async () => {
@@ -358,13 +373,19 @@ const pruneStalePendingParticipants = async (
   if (!hasStalePending) return state;
 
   await mutateLobby(postId, (current, mutationNow) => {
-    if (!current || current.lobbyId !== state.lobbyId || current.status !== 'idle') {
+    if (
+      !current ||
+      current.lobbyId !== state.lobbyId ||
+      current.status !== 'idle'
+    ) {
       return {
         state: current ?? createLobby(postId, mutationNow),
         value: undefined,
       };
     }
-    for (const [clientId, participant] of Object.entries(current.participants)) {
+    for (const [clientId, participant] of Object.entries(
+      current.participants
+    )) {
       if (
         !participant.ready &&
         mutationNow - participant.joinedAt > PENDING_JOIN_TTL_MS
@@ -440,7 +461,9 @@ export const realtimeStressRouter = router({
   status: publicProcedure.query(async () => {
     const postId = requirePostId();
     const stored = await readLobby(postId);
-    const recovered = stored ? await recoverStaleRun(postId, stored) : undefined;
+    const recovered = stored
+      ? await recoverStaleRun(postId, stored)
+      : undefined;
     const state = recovered
       ? await pruneStalePendingParticipants(postId, recovered)
       : undefined;
@@ -458,7 +481,9 @@ export const realtimeStressRouter = router({
         expiration: new Date(Date.now() + ACTIVE_LOCK_TTL_MS),
       });
       if (!acquired) {
-        throw new Error('Another stress test is already running in this installation');
+        throw new Error(
+          'Another stress test is already running in this installation'
+        );
       }
 
       let startedAt = Date.now() + RUN_START_DELAY_MS;
@@ -475,14 +500,18 @@ export const realtimeStressRouter = router({
           for (const [clientId, participant] of Object.entries(
             current.participants
           )) {
-            if (!participant.ready && now - participant.joinedAt > PENDING_JOIN_TTL_MS) {
+            if (
+              !participant.ready &&
+              now - participant.joinedAt > PENDING_JOIN_TTL_MS
+            ) {
               delete current.participants[clientId];
             }
           }
 
           const participants = activeParticipants(current);
           const caller = current.participants[input.clientId];
-          if (!caller?.ready) throw new Error('Join the stress test before starting');
+          if (!caller?.ready)
+            throw new Error('Join the stress test before starting');
           if (participants.some((participant) => !participant.ready)) {
             throw new Error('Wait for pending clients to finish joining');
           }
@@ -497,7 +526,9 @@ export const realtimeStressRouter = router({
             runId,
             startedAt,
             endsAt: startedAt + REALTIME_STRESS_DURATION_MS,
-            participantIds: participants.map((participant) => participant.clientId),
+            participantIds: participants.map(
+              (participant) => participant.clientId
+            ),
           };
           current.summary = null;
           current.results = {};
@@ -515,7 +546,10 @@ export const realtimeStressRouter = router({
           runId,
           startedAt,
           send: async (targetChannel, message: RealtimeStressDataMessage) => {
-            await realtime.send<RealtimeStressDataMessage>(targetChannel, message);
+            await realtime.send<RealtimeStressDataMessage>(
+              targetChannel,
+              message
+            );
           },
         });
         await finalizeRun(postId, runId, summary);
@@ -531,16 +565,24 @@ export const realtimeStressRouter = router({
       } catch (error) {
         const state = await readLobby(postId).catch(() => undefined);
         if (state?.run?.runId === runId && state.status === 'running') {
-          await finalizeRun(postId, runId, failedSummary(runId, startedAt, error)).catch(
-            (finalizeError) => {
-              console.error('Failed to record stress-test failure:', finalizeError);
-            }
-          );
+          await finalizeRun(
+            postId,
+            runId,
+            failedSummary(runId, startedAt, error)
+          ).catch((finalizeError) => {
+            console.error(
+              'Failed to record stress-test failure:',
+              finalizeError
+            );
+          });
         }
         throw error;
       } finally {
         await releaseActiveLock(ownedLockValue).catch((error) => {
-          console.warn('Failed to release stress-test installation lock:', error);
+          console.warn(
+            'Failed to release stress-test installation lock:',
+            error
+          );
         });
       }
     }),

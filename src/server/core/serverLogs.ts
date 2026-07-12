@@ -22,7 +22,9 @@ const logEntrySchema = z.object({
 
 let installed = false;
 
-const normalizeServerLogLimit = (value: number | string | undefined): number => {
+const normalizeServerLogLimit = (
+  value: number | string | undefined
+): number => {
   const limit = typeof value === 'number' ? value : Number(value);
   if (
     Number.isInteger(limit) &&
@@ -50,13 +52,15 @@ const formatPart = (part: unknown): string => {
 export const getServerLogLimit = async (): Promise<number> => {
   const stored = await redis.get(serverLogLimitKey);
   const limit = normalizeServerLogLimit(stored);
-  if (stored !== String(limit)) await redis.set(serverLogLimitKey, String(limit));
+  if (stored !== String(limit))
+    await redis.set(serverLogLimitKey, String(limit));
   return limit;
 };
 
 const trimServerLogs = async (limit: number) => {
   const count = await redis.zCard(serverLogsKey);
-  if (count > limit) await redis.zRemRangeByRank(serverLogsKey, 0, count - limit - 1);
+  if (count > limit)
+    await redis.zRemRangeByRank(serverLogsKey, 0, count - limit - 1);
   await redis.expire(serverLogsKey, serverLogsTtlSeconds);
 };
 
