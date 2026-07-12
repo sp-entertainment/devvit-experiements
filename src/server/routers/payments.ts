@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { context, payments, redis } from '@devvit/web/server';
+import { redisInteger } from '../paymentRules';
 import {
   authenticatedProcedure,
   moderatorProcedure,
@@ -30,6 +31,10 @@ export const paymentsRouter = router({
   // Reads the Redis entitlement flags granted by src/server/routes/payments.ts's
   // `fulfillOrder` handler for the calling user.
   getMyEntitlements: authenticatedProcedure.query(async () => {
-    return await redis.hGetAll(`entitlement:${context.userId}`);
+    const [entitlements, wallet] = await Promise.all([
+      redis.hGetAll(`entitlement:${context.userId}`),
+      redis.hGetAll(`wallet:${context.userId}`),
+    ]);
+    return { entitlements, coinBalance: redisInteger(wallet.coins) };
   }),
 });

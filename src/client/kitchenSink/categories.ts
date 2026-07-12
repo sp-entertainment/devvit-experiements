@@ -773,9 +773,9 @@ const buildPayments = (container: HTMLElement) => {
       run: () => trpc.payments.listOrders.query({ limit: 10 }),
     }),
     exampleRow({
-      title: 'My entitlements (Redis, set by fulfillOrder)',
+      title: 'My entitlements and wallet (Redis)',
       description:
-        'Read the entitlement flags granted by the server-side fulfillOrder handler.',
+        'Read durable grants and the idempotent consumable coin balance maintained by the payment callbacks.',
       run: () => trpc.payments.getMyEntitlements.query(),
     })
   );
