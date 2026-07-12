@@ -27,20 +27,24 @@ export const buildAgentConsole = (container: HTMLElement) => {
   fixture.dataset.testid = 'agent-fixture-status';
   fixture.textContent =
     'Checking whether this is the registered agent fixture…';
-  let readinessOk = false;
+  let readinessRequest = 0;
 
   const refreshReadiness = async () => {
+    const request = ++readinessRequest;
     const expectedBuildId = expected.value.trim() || buildId;
     const result = await trpc.agent.readiness.query({
       expectedBuildId,
     });
     const clientMatches = expectedBuildId === buildId;
-    const ready = clientMatches && result.ready;
-    readinessOk = ready;
+    const inputUnchanged =
+      (expected.value.trim() || buildId) === expectedBuildId;
+    const ready = clientMatches && result.ready && inputUnchanged;
+    if (request !== readinessRequest) return false;
     readiness.classList.toggle('ks-output-error', !ready);
     readiness.textContent = ready
       ? `READY · client ${buildId} · server ${result.serverBuildId}`
       : `STALE · expected ${result.expectedBuildId} · client ${buildId} · server ${result.serverBuildId}`;
+    return ready;
   };
 
   const refreshFixture = async () => {
@@ -67,14 +71,17 @@ export const buildAgentConsole = (container: HTMLElement) => {
   const run = el('button', 'ks-button');
   run.dataset.testid = 'agent-command-run';
   run.textContent = 'Run command';
-  const finish = el('button', 'ks-button');
-  finish.dataset.testid = 'agent-run-finish';
-  finish.textContent = 'Finish and clean up';
+  const finishPassed = el('button', 'ks-button');
+  finishPassed.dataset.testid = 'agent-run-finish-passed';
+  finishPassed.textContent = 'Finish passed';
+  const finishFailed = el('button', 'ks-button');
+  finishFailed.dataset.testid = 'agent-run-finish-failed';
+  finishFailed.textContent = 'Finish failed';
   const reset = el('button', 'ks-button');
   reset.dataset.testid = 'agent-run-reset';
   reset.textContent = 'Reset retained state';
   const controls = el('div', 'ks-row-controls');
-  controls.append(start, run, finish, reset);
+  controls.append(start, run, finishPassed, finishFailed, reset);
 
   let runId: string | undefined;
   let loadedCommands: AgentCommand[] = [];
@@ -98,7 +105,8 @@ export const buildAgentConsole = (container: HTMLElement) => {
   const setBusy = (busy: boolean) => {
     start.disabled = busy;
     run.disabled = busy;
-    finish.disabled = busy;
+    finishPassed.disabled = busy;
+    finishFailed.disabled = busy;
     reset.disabled = busy;
   };
 
@@ -114,9 +122,9 @@ export const buildAgentConsole = (container: HTMLElement) => {
     void (async () => {
       setBusy(true);
       try {
-        await refreshReadiness();
+        const ready = await refreshReadiness();
         await refreshFixture();
-        if (!readinessOk) throw new Error('Build freshness is not ready.');
+        if (!ready) throw new Error('Build freshness is not ready.');
         const result = await trpc.agent.startRun.mutate();
         runId = result.runId;
         output.textContent = format(result);
@@ -154,15 +162,16 @@ export const buildAgentConsole = (container: HTMLElement) => {
     })();
   });
 
-  finish.addEventListener('click', () => {
+  const finishRun = (passed: boolean) => {
     void (async () => {
       if (!runId) return;
       setBusy(true);
       try {
         const result = await trpc.agent.finishRun.mutate({
           runId,
-          passed: true,
+          passed,
         });
+        output.classList.toggle('ks-output-error', result.status === 'failed');
         output.textContent = format(result);
       } catch (error) {
         output.classList.add('ks-output-error');
@@ -171,7 +180,9 @@ export const buildAgentConsole = (container: HTMLElement) => {
         setBusy(false);
       }
     })();
-  });
+  };
+  finishPassed.addEventListener('click', () => finishRun(true));
+  finishFailed.addEventListener('click', () => finishRun(false));
 
   reset.addEventListener('click', () => {
     void (async () => {

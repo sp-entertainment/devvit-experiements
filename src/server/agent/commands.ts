@@ -1,12 +1,9 @@
 import { redis } from '@devvit/web/server';
 import { z } from 'zod';
 import { buildId } from '../../shared/buildInfo';
+import { AGENT_TRANSIENT_TTL_SECONDS, type AgentCheck } from './run';
 
-export type AgentCheck = {
-  name: string;
-  passed: boolean;
-  detail?: string;
-};
+export type { AgentCheck } from './run';
 
 export type AgentCommandResult = {
   checks: AgentCheck[];
@@ -55,7 +52,9 @@ const commands: AgentCommand[] = [
     run: async (_input, runId) => {
       const key = `agent:${runId}:smoke`;
       const value = `ok:${buildId}`;
-      await redis.set(key, value);
+      await redis.set(key, value, {
+        expiration: new Date(Date.now() + AGENT_TRANSIENT_TTL_SECONDS * 1_000),
+      });
       const actual = await redis.get(key);
       return {
         checks: [
@@ -79,6 +78,7 @@ const commands: AgentCommand[] = [
     run: async (_input, runId) => {
       const key = `agent:${runId}:hash`;
       await redis.hSet(key, { runId, buildId });
+      await redis.expire(key, AGENT_TRANSIENT_TTL_SECONDS);
       const value = await redis.hGetAll(key);
       return {
         checks: [
