@@ -3,6 +3,11 @@ import { z } from 'zod';
 import { context, realtime, redis } from '@devvit/web/server';
 import { authenticatedProcedure, publicProcedure, router } from '../trpc';
 import {
+  isRedisTransactionConflict,
+  redisTransactionConflictError,
+  retryRedisTransaction,
+} from '../redisTransactionRetry';
+import {
   BALL_MARGIN,
   BALL_MOVE_MAX_DURATION_MS,
   BALL_STALE_MS,
@@ -165,27 +170,34 @@ const writeBallState = async (
   key: string,
   playerId: string,
   getNext: (current: BallState | undefined) => BallState
-) => {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const txn = await redis.watch(key);
-    const raw = await redis.hGet(key, playerId);
-    let next: BallState;
-
+): Promise<BallState> =>
+  retryRedisTransaction(async () => {
+    const transaction = await redis.watch(key);
+    let multiStarted = false;
     try {
-      next = getNext(raw ? parseBallState(raw) : undefined);
+      const raw = await redis.hGet(key, playerId);
+      const next = getNext(raw ? parseBallState(raw) : undefined);
+      await transaction.multi();
+      multiStarted = true;
+      await transaction.hSet(key, { [playerId]: JSON.stringify(next) });
+      const result = await transaction.exec();
+      if (result.length === 0) throw redisTransactionConflictError();
+      return next;
     } catch (error) {
-      await txn.unwatch();
+      try {
+        if (multiStarted) await transaction.discard();
+        else await transaction.unwatch();
+      } catch (cleanupError) {
+        if (!isRedisTransactionConflict(error)) {
+          console.debug(
+            'Unable to clean up the movement Redis transaction:',
+            cleanupError
+          );
+        }
+      }
       throw error;
     }
-
-    await txn.multi();
-    await txn.hSet(key, { [playerId]: JSON.stringify(next) });
-    const result = await txn.exec();
-    if (result.length > 0) return next;
-  }
-
-  throw new Error('Movement update conflicted; retry');
-};
+  });
 
 const parseCanvasItem = (value: string): CanvasItem =>
   canvasItemSchema.parse(JSON.parse(value));
