@@ -90,6 +90,7 @@ class TankGameScene extends Phaser.Scene {
   unsubscribeConnection: (() => void) | undefined;
   pendingStates = new Map<number, TankGameState>();
   recoveryPromise: Promise<void> | undefined;
+  snapshotPromise: Promise<void> | undefined;
   lastViewKey = '';
   feedback = '';
 
@@ -205,22 +206,29 @@ class TankGameScene extends Phaser.Scene {
     graphics.destroy();
   }
 
-  async loadSnapshot(showErrors = true) {
-    try {
-      const snapshot = await trpc.tankGame.snapshot.query();
-      if (!this.active) return;
-      this.applyState(
-        snapshot.state,
-        snapshot.selfPlayerId,
-        snapshot.serverNow
-      );
-      this.discardAppliedPendingStates();
-    } catch (error) {
-      if (!this.active) return;
-      const message = errorMessage(error);
-      console.error('Failed to load tank game snapshot:', error);
-      if (showErrors) showToast(`Tank game load failed: ${message}`);
-    }
+  loadSnapshot(showErrors = true): Promise<void> {
+    if (this.snapshotPromise) return this.snapshotPromise;
+    const request = (async () => {
+      try {
+        const snapshot = await trpc.tankGame.snapshot.query();
+        if (!this.active) return;
+        this.applyState(
+          snapshot.state,
+          snapshot.selfPlayerId,
+          snapshot.serverNow
+        );
+        this.discardAppliedPendingStates();
+      } catch (error) {
+        if (!this.active) return;
+        const message = errorMessage(error);
+        console.error('Failed to load tank game snapshot:', error);
+        if (showErrors) showToast(`Tank game load failed: ${message}`);
+      }
+    })().finally(() => {
+      if (this.snapshotPromise === request) this.snapshotPromise = undefined;
+    });
+    this.snapshotPromise = request;
+    return request;
   }
 
   enqueueState(
@@ -229,7 +237,11 @@ class TankGameScene extends Phaser.Scene {
     serverNow: number
   ) {
     if (!this.active) return;
-    if (!this.state || state.version <= this.state.version) return;
+    if (this.state && state.version < this.state.version) return;
+    if (this.state && state.version === this.state.version) {
+      this.applyState(state, selfPlayerId, serverNow);
+      return;
+    }
 
     this.pendingStates.set(state.version, state);
     void this.drainPendingStates(selfPlayerId, serverNow);
@@ -297,16 +309,19 @@ class TankGameScene extends Phaser.Scene {
   ) {
     if (!this.active) return;
 
-    this.serverOffsetMs = Date.now() - serverNow;
     const previousSelfPlayerId = this.selfPlayerId;
     if (selfPlayerId !== undefined) this.selfPlayerId = selfPlayerId;
     if (this.state && state.version < this.state.version) {
-      this.publishView();
+      if (previousSelfPlayerId !== this.selfPlayerId) {
+        this.syncPlayers();
+        this.publishView(true);
+      }
       return;
     }
 
     const isNewVersion = !this.state || state.version > this.state.version;
-    this.state = state;
+    this.serverOffsetMs = Date.now() - serverNow;
+    if (isNewVersion) this.state = state;
     if (isNewVersion) {
       if (state.lastAction?.actorId === this.selfPlayerId) {
         this.selectedAction = undefined;
