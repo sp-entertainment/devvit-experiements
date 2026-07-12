@@ -39,6 +39,12 @@ type PendingTextRequest = {
   requestId: string;
 };
 
+type PixelRequest = {
+  col: number;
+  row: number;
+  color: string;
+};
+
 const colorNumber = (color: string) => {
   const parsed = Number.parseInt(color.slice(1), 16);
   return Number.isFinite(parsed) ? parsed : 0x38bdf8;
@@ -67,6 +73,8 @@ class SharedCanvasScene extends Phaser.Scene {
   lastEraseAt = 0;
   active = false;
   canvasRevision = 0;
+  pixelQueue: PixelRequest[] = [];
+  pixelWriteInFlight = false;
   snapshotPromise: Promise<void> | undefined;
   snapshotRefreshRequested = false;
   textCommitInFlight = false;
@@ -218,27 +226,33 @@ class SharedCanvasScene extends Phaser.Scene {
     const key = `${col}:${row}`;
     if (this.paintedThisDrag.has(key)) return;
     this.paintedThisDrag.add(key);
+    this.pixelQueue.push({ col, row, color: this.controls.getColor() });
+    void this.flushPixelQueue();
+  }
 
-    void (async () => {
-      try {
-        const { item } = await trpc.realtime.canvas.putPixel.mutate({
-          col,
-          row,
-          color: this.controls.getColor(),
-        });
-        if (!this.active) return;
+  async flushPixelQueue() {
+    if (!this.active || this.pixelWriteInFlight) return;
+    const request = this.pixelQueue.shift();
+    if (!request) return;
 
-        this.applyPut(item, item.revision);
-        this.setStatus('Pixel shared.');
-      } catch (error) {
-        if (!this.active) return;
+    this.pixelWriteInFlight = true;
+    try {
+      const { item } = await trpc.realtime.canvas.putPixel.mutate(request);
+      if (!this.active) return;
 
-        const message = errorMessage(error);
-        this.setStatus(`Pixel failed: ${message}`);
-        console.error('Failed to share canvas pixel:', error);
-        showToast(`Pixel failed: ${message}`);
-      }
-    })();
+      this.applyPut(item, item.revision);
+      this.setStatus('Pixel shared.');
+    } catch (error) {
+      if (!this.active) return;
+
+      const message = errorMessage(error);
+      this.setStatus(`Pixel failed: ${message}`);
+      console.error('Failed to share canvas pixel:', error);
+      showToast(`Pixel failed: ${message}`);
+    } finally {
+      this.pixelWriteInFlight = false;
+      if (this.active) void this.flushPixelQueue();
+    }
   }
 
   eraseAt(x: number, y: number) {
@@ -390,6 +404,7 @@ class SharedCanvasScene extends Phaser.Scene {
     );
     window.removeEventListener('focus', this.handleFocus);
     window.removeEventListener('pageshow', this.handlePageShow);
+    this.pixelQueue = [];
     for (const { object } of this.items.values()) {
       object.destroy();
     }

@@ -16,6 +16,7 @@ import {
 const BALL_RADIUS = 18;
 const AUTO_MOVE_DELAY_MS = 650;
 const SNAPSHOT_DELAY_MS = 1_000;
+const smoothMovementClientId = crypto.randomUUID();
 
 type BallView = {
   dot: Phaser.GameObjects.Arc;
@@ -160,7 +161,9 @@ class SmoothMovementScene extends Phaser.Scene {
     this.joinInFlight = true;
     traceClientLog('Joining smooth movement demo.');
     try {
-      const snapshot = await trpc.realtime.joinBall.mutate();
+      const snapshot = await trpc.realtime.joinBall.mutate({
+        clientId: smoothMovementClientId,
+      });
       if (!this.active) return;
 
       this.playerId = snapshot.selfPlayerId;
@@ -186,12 +189,21 @@ class SmoothMovementScene extends Phaser.Scene {
     if (this.moveInFlight) return;
 
     this.moveInFlight = true;
+    let blockedByOtherClient = false;
     this.setStatus('Requesting move...');
     try {
-      const message = await trpc.realtime.moveBall.mutate({ to });
+      const result = await trpc.realtime.moveBall.mutate({
+        to,
+        clientId: smoothMovementClientId,
+      });
       if (!this.active) return;
 
-      this.applyMove(message);
+      if (!result.accepted) {
+        blockedByOtherClient = result.movingClientId !== smoothMovementClientId;
+        if (blockedByOtherClient) void this.refreshSnapshot();
+        return;
+      }
+      this.applyMove(result.message);
     } catch (error) {
       if (!this.active) return;
 
@@ -203,7 +215,7 @@ class SmoothMovementScene extends Phaser.Scene {
     } finally {
       if (this.active) {
         this.moveInFlight = false;
-        if (!this.localMoving) {
+        if (!this.localMoving && !blockedByOtherClient) {
           this.setStatus(
             'Connected. Server-authoritative movement is running.'
           );
