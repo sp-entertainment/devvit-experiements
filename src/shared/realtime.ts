@@ -7,7 +7,7 @@ export const BALL_MARGIN = 36;
 export const BALL_STALE_MS = 120_000;
 export const BALL_MOVE_MIN_DURATION_MS = 450;
 export const BALL_MOVE_MAX_DURATION_MS = 1_400;
-export const SMOOTH_MOVEMENT_STATE_VERSION = 3;
+export const SMOOTH_MOVEMENT_STATE_VERSION = 4;
 
 export const CANVAS_WORLD_WIDTH = 1024;
 export const CANVAS_WORLD_HEIGHT = 768;
@@ -44,6 +44,7 @@ export type BallState = {
   playerId: string;
   userId: string;
   username: string;
+  moveClientId: string;
   color: string;
   from: BallPoint;
   to: BallPoint;

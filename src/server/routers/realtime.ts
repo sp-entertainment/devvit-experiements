@@ -50,6 +50,7 @@ const ballStateSchema = z.object({
   playerId: z.string(),
   userId: z.string(),
   username: z.string(),
+  moveClientId: z.string().uuid(),
   color: z.string(),
   from: ballPointSchema,
   to: ballPointSchema,
@@ -147,6 +148,7 @@ const createBall = (
   playerId: string,
   userId: string,
   username: string,
+  moveClientId: string,
   now: number
 ): BallState => {
   const point = randomPoint();
@@ -154,6 +156,7 @@ const createBall = (
     playerId,
     userId,
     username,
+    moveClientId,
     color: randomColor(),
     from: point,
     to: point,
@@ -241,6 +244,17 @@ const sendBallMove = async (
     });
 };
 
+class BallMoveInProgressError extends Error {
+  public constructor(public readonly moveClientId: string) {
+    super('Ball movement is already in progress');
+    this.name = 'BallMoveInProgressError';
+  }
+}
+
+type BallMoveResult =
+  | { accepted: true; message: RealtimeBallMoveMessage }
+  | { accepted: false; movingClientId: string };
+
 const parseCanvasRevision = (raw: string | undefined): number => {
   if (raw === undefined) return 0;
   const revision = Number(raw);
@@ -300,19 +314,24 @@ const readCanvasSnapshot = async (
   retryRedisTransaction(async () => {
     const key = sharedCanvasKey(postId);
     const revisionKey = sharedCanvasRevisionKey(postId);
+    const revisionBefore = await redis.get(revisionKey);
+    const stored = await redis.hGetAll(key);
+    const revisionAfter = await redis.get(revisionKey);
+    if (revisionBefore !== revisionAfter) throw redisTransactionConflictError();
+
+    const revision = parseCanvasRevision(revisionAfter);
+    const { items, badIds } = parseCanvasItems(stored);
+    if (badIds.length === 0) return { items, revision };
+
     const transaction = await redis.watch(key, revisionKey);
     let multiStarted = false;
     try {
-      const [stored, rawRevision] = await Promise.all([
-        redis.hGetAll(key),
-        redis.get(revisionKey),
-      ]);
-      const revision = parseCanvasRevision(rawRevision);
-      const { items, badIds } = parseCanvasItems(stored);
+      if ((await redis.get(revisionKey)) !== revisionAfter) {
+        throw redisTransactionConflictError();
+      }
       await transaction.multi();
       multiStarted = true;
-      if (badIds.length) await transaction.hDel(key, badIds);
-      await transaction.set(revisionKey, String(revision));
+      await transaction.hDel(key, badIds);
       const result = await transaction.exec();
       if (result.length === 0) throw redisTransactionConflictError();
       return { items, revision };
@@ -380,61 +399,78 @@ export const realtimeRouter = router({
       return { success: true };
     }),
 
-  joinBall: authenticatedProcedure.mutation(async () => {
-    const postId = requirePostId();
-    const { playerId, userId, username } = requireUser();
-    const key = smoothMovementBallsKey(postId);
-    const now = Date.now();
+  joinBall: authenticatedProcedure
+    .input(z.object({ clientId: z.string().uuid() }))
+    .mutation(async ({ input }) => {
+      const postId = requirePostId();
+      const { playerId, userId, username } = requireUser();
+      const key = smoothMovementBallsKey(postId);
+      const now = Date.now();
 
-    const self = await writeBallState(key, playerId, (current) => ({
-      ...(current ?? createBall(playerId, userId, username, now)),
-      username,
-      updatedAt: now,
-    }));
-    const activeBalls = await readActiveBalls(key, now);
+      const self = await writeBallState(key, playerId, (current) => ({
+        ...(current ??
+          createBall(playerId, userId, username, input.clientId, now)),
+        username,
+        updatedAt: now,
+      }));
+      const activeBalls = await readActiveBalls(key, now);
 
-    await sendBallMove(postId, ballMoveMessageFromState(self, now));
+      await sendBallMove(postId, ballMoveMessageFromState(self, now));
 
-    return {
-      selfPlayerId: playerId,
-      moves: activeBalls.map((ball) => ballMoveMessageFromState(ball, now)),
-    };
-  }),
+      return {
+        selfPlayerId: playerId,
+        moves: activeBalls.map((ball) => ballMoveMessageFromState(ball, now)),
+      };
+    }),
 
   moveBall: authenticatedProcedure
-    .input(z.object({ to: ballPointSchema }))
-    .mutation(async ({ input }) => {
+    .input(z.object({ to: ballPointSchema, clientId: z.string().uuid() }))
+    .mutation(async ({ input }): Promise<BallMoveResult> => {
       const postId = requirePostId();
       const { playerId, userId, username } = requireUser();
       const key = smoothMovementBallsKey(postId);
       const now = Date.now();
       const to = { x: Math.round(input.to.x), y: Math.round(input.to.y) };
 
-      const next = await writeBallState(key, playerId, (current) => {
-        const ball = current ?? createBall(playerId, userId, username, now);
-        const from = ballMoveMessageFromState(ball, now).from;
-        const stillMoving =
-          ball.durationMs > 0 && now - ball.moveStartedAt < ball.durationMs;
+      let next: BallState;
+      try {
+        next = await writeBallState(key, playerId, (current) => {
+          const ball =
+            current ??
+            createBall(playerId, userId, username, input.clientId, now);
+          const from = ballMoveMessageFromState(ball, now).from;
+          const stillMoving =
+            ball.durationMs > 0 && now - ball.moveStartedAt < ball.durationMs;
 
-        if (stillMoving) {
-          throw new Error('Wait for the current move to finish');
+          if (stillMoving) {
+            throw new BallMoveInProgressError(ball.moveClientId);
+          }
+
+          return {
+            ...ball,
+            username,
+            moveClientId: input.clientId,
+            from,
+            to,
+            durationMs: ballMovementDuration(from, to),
+            moveStartedAt: now,
+            seq: ball.seq + 1,
+            updatedAt: now,
+          };
+        });
+      } catch (error) {
+        if (error instanceof BallMoveInProgressError) {
+          return {
+            accepted: false,
+            movingClientId: error.moveClientId,
+          };
         }
-
-        return {
-          ...ball,
-          username,
-          from,
-          to,
-          durationMs: ballMovementDuration(from, to),
-          moveStartedAt: now,
-          seq: ball.seq + 1,
-          updatedAt: now,
-        };
-      });
+        throw error;
+      }
       const message = ballMoveMessageFromState(next, now);
 
       await sendBallMove(postId, message);
-      return message;
+      return { accepted: true, message };
     }),
 
   ballSnapshot: publicProcedure.query(async () => {

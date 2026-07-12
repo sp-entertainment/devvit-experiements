@@ -135,7 +135,7 @@ const runSchema = z.object({
 });
 
 const lobbySchema = z.object({
-  version: z.literal(2),
+  version: z.literal(3),
   lobbyId: z.string().uuid(),
   postId: z.string().min(1),
   channel: z.string().regex(/^[a-zA-Z0-9_]+$/),
@@ -184,13 +184,13 @@ const requireParticipantOwner = (
 };
 
 const lobbyKey = (postId: string): string =>
-  `realtime-stress:v2:lobby:${postId}`;
+  `realtime-stress:v3:lobby:${postId}`;
 
 const newChannel = (): string =>
   `realtime_stress_${randomUUID().replaceAll('-', '_')}`;
 
 const createLobby = (postId: string, now: number): LobbyState => ({
-  version: 2,
+  version: 3,
   lobbyId: randomUUID(),
   postId,
   channel: newChannel(),
