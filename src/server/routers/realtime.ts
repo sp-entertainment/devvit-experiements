@@ -26,9 +26,11 @@ import {
   ballMovementDuration,
   sharedCanvasKey,
   sharedCanvasRevisionKey,
+  smoothMovementBallColorsKey,
   smoothMovementBallsKey,
   type BallState,
   type CanvasItem,
+  type RealtimeBallLeaveMessage,
   type RealtimeBallMoveMessage,
   type RealtimeCanvasPutBatchMessage,
   type RealtimeCanvasEraseMessage,
@@ -52,6 +54,7 @@ const ballStateSchema = z.object({
   userId: z.string(),
   username: z.string(),
   moveClientId: z.string().uuid(),
+  clientIds: z.array(z.string().uuid()).min(1),
   color: z.string(),
   from: ballPointSchema,
   to: ballPointSchema,
@@ -166,6 +169,7 @@ const createBall = (
   userId: string,
   username: string,
   moveClientId: string,
+  color: string,
   now: number
 ): BallState => {
   const point = randomPoint();
@@ -174,7 +178,8 @@ const createBall = (
     userId,
     username,
     moveClientId,
-    color: randomColor(),
+    clientIds: [moveClientId],
+    color,
     from: point,
     to: point,
     durationMs: 0,
@@ -183,6 +188,44 @@ const createBall = (
     updatedAt: now,
   };
 };
+
+const getOrAssignBallColor = async (
+  postId: string,
+  playerId: string
+): Promise<string> =>
+  retryRedisTransaction(async () => {
+    const key = smoothMovementBallColorsKey(postId);
+    const transaction = await redis.watch(key);
+    let multiStarted = false;
+    try {
+      const stored = await redis.hGet(key, playerId);
+      if (stored && CANVAS_COLORS.includes(stored)) {
+        await transaction.unwatch();
+        return stored;
+      }
+
+      const color = randomColor();
+      await transaction.multi();
+      multiStarted = true;
+      await transaction.hSet(key, { [playerId]: color });
+      const result = await transaction.exec();
+      if (result.length === 0) throw redisTransactionConflictError();
+      return color;
+    } catch (error) {
+      try {
+        if (multiStarted) await transaction.discard();
+        else await transaction.unwatch();
+      } catch (cleanupError) {
+        if (!isRedisTransactionConflict(error)) {
+          console.debug(
+            'Unable to clean up the ball color Redis transaction:',
+            cleanupError
+          );
+        }
+      }
+      throw error;
+    }
+  });
 
 const parseBallState = (value: string): BallState => {
   const parsed = JSON.parse(value);
@@ -214,6 +257,103 @@ const writeBallState = async (
         if (!isRedisTransactionConflict(error)) {
           console.debug(
             'Unable to clean up the movement Redis transaction:',
+            cleanupError
+          );
+        }
+      }
+      throw error;
+    }
+  });
+
+const removeBallClient = async (
+  key: string,
+  playerId: string,
+  clientId: string
+): Promise<boolean> =>
+  retryRedisTransaction(async () => {
+    const transaction = await redis.watch(key);
+    let multiStarted = false;
+    try {
+      const raw = await redis.hGet(key, playerId);
+      if (!raw) {
+        await transaction.unwatch();
+        return false;
+      }
+      const ball = parseBallState(raw);
+      const clientIds = ball.clientIds.filter((id) => id !== clientId);
+      if (clientIds.length === ball.clientIds.length) {
+        await transaction.unwatch();
+        return false;
+      }
+
+      await transaction.multi();
+      multiStarted = true;
+      if (clientIds.length === 0) {
+        await transaction.hDel(key, [playerId]);
+      } else {
+        await transaction.hSet(key, {
+          [playerId]: JSON.stringify({ ...ball, clientIds }),
+        });
+      }
+      const result = await transaction.exec();
+      if (result.length === 0) throw redisTransactionConflictError();
+      return clientIds.length === 0;
+    } catch (error) {
+      try {
+        if (multiStarted) await transaction.discard();
+        else await transaction.unwatch();
+      } catch (cleanupError) {
+        if (!isRedisTransactionConflict(error)) {
+          console.debug(
+            'Unable to clean up the movement leave Redis transaction:',
+            cleanupError
+          );
+        }
+      }
+      throw error;
+    }
+  });
+
+const setBallColor = async (
+  postId: string,
+  playerId: string,
+  color: string
+): Promise<RealtimeBallMoveMessage | null> =>
+  retryRedisTransaction(async () => {
+    const ballsKey = smoothMovementBallsKey(postId);
+    const colorsKey = smoothMovementBallColorsKey(postId);
+    const transaction = await redis.watch(ballsKey, colorsKey);
+    let multiStarted = false;
+    try {
+      const raw = await redis.hGet(ballsKey, playerId);
+      const current = raw ? parseBallState(raw) : undefined;
+      const next = current && {
+        ...current,
+        color,
+        seq: current.seq + 1,
+        updatedAt: Date.now(),
+      };
+      const now = Date.now();
+
+      await transaction.multi();
+      multiStarted = true;
+      await transaction.hSet(colorsKey, { [playerId]: color });
+      if (next) {
+        await transaction.hSet(ballsKey, {
+          [playerId]: JSON.stringify(next),
+        });
+      }
+      const result = await transaction.exec();
+      if (result.length === 0) throw redisTransactionConflictError();
+      return next ? ballMoveMessageFromState(next, now) : null;
+    } catch (error) {
+      try {
+        if (multiStarted) await transaction.discard();
+        else await transaction.unwatch();
+      } catch (cleanupError) {
+        if (!isRedisTransactionConflict(error)) {
+          console.debug(
+            'Unable to clean up the ball color update Redis transaction:',
             cleanupError
           );
         }
@@ -473,11 +613,16 @@ export const realtimeRouter = router({
       const { playerId, userId, username } = requireUser();
       const key = smoothMovementBallsKey(postId);
       const now = Date.now();
+      const color = await getOrAssignBallColor(postId, playerId);
 
       const self = await writeBallState(key, playerId, (current) => ({
         ...(current ??
-          createBall(playerId, userId, username, input.clientId, now)),
+          createBall(playerId, userId, username, input.clientId, color, now)),
         username,
+        color,
+        clientIds: [
+          ...new Set([...(current?.clientIds ?? []), input.clientId]),
+        ],
         updatedAt: now,
       }));
       const activeBalls = await readActiveBalls(key, now);
@@ -486,8 +631,44 @@ export const realtimeRouter = router({
 
       return {
         selfPlayerId: playerId,
+        selfColor: self.color,
         moves: activeBalls.map((ball) => ballMoveMessageFromState(ball, now)),
       };
+    }),
+
+  leaveBall: authenticatedProcedure
+    .input(z.object({ clientId: z.string().uuid() }))
+    .mutation(async ({ input }) => {
+      const postId = requirePostId();
+      const { playerId } = requireUser();
+      const removed = await removeBallClient(
+        smoothMovementBallsKey(postId),
+        playerId,
+        input.clientId
+      );
+      if (removed) {
+        const message: RealtimeBallLeaveMessage = {
+          type: 'ballLeave',
+          playerId,
+          sentAt: Date.now(),
+        };
+        await realtime
+          .send<RealtimeBallLeaveMessage>(postId, message)
+          .catch((error) => {
+            console.warn('Failed to broadcast ball leave:', error);
+          });
+      }
+      return { removed };
+    }),
+
+  setBallColor: authenticatedProcedure
+    .input(z.object({ color: colorSchema }))
+    .mutation(async ({ input }) => {
+      const postId = requirePostId();
+      const { playerId } = requireUser();
+      const message = await setBallColor(postId, playerId, input.color);
+      if (message) await sendBallMove(postId, message);
+      return { color: input.color, message };
     }),
 
   moveBall: authenticatedProcedure
@@ -498,13 +679,14 @@ export const realtimeRouter = router({
       const key = smoothMovementBallsKey(postId);
       const now = Date.now();
       const to = { x: Math.round(input.to.x), y: Math.round(input.to.y) };
+      const color = await getOrAssignBallColor(postId, playerId);
 
       let next: BallState;
       try {
         next = await writeBallState(key, playerId, (current) => {
           const ball =
             current ??
-            createBall(playerId, userId, username, input.clientId, now);
+            createBall(playerId, userId, username, input.clientId, color, now);
           const from = ballMoveMessageFromState(ball, now).from;
           const stillMoving =
             ball.durationMs > 0 && now - ball.moveStartedAt < ball.durationMs;

@@ -7,7 +7,7 @@ export const BALL_MARGIN = 36;
 export const BALL_STALE_MS = 120_000;
 export const BALL_MOVE_MIN_DURATION_MS = 450;
 export const BALL_MOVE_MAX_DURATION_MS = 1_400;
-export const SMOOTH_MOVEMENT_STATE_VERSION = 4;
+export const SMOOTH_MOVEMENT_STATE_VERSION = 5;
 
 export const CANVAS_WORLD_WIDTH = 1024;
 export const CANVAS_WORLD_HEIGHT = 768;
@@ -31,6 +31,8 @@ export const CANVAS_COLORS = [
 
 export const smoothMovementBallsKey = (postId: string) =>
   `smooth-movement:v${SMOOTH_MOVEMENT_STATE_VERSION}:balls:${postId}`;
+export const smoothMovementBallColorsKey = (postId: string) =>
+  `smooth-movement:colors:${postId}`;
 export const sharedCanvasKey = (postId: string) => `canvas:${postId}`;
 export const sharedCanvasRevisionKey = (postId: string) =>
   `canvas:${postId}:revision`;
@@ -45,6 +47,7 @@ export type BallState = {
   userId: string;
   username: string;
   moveClientId: string;
+  clientIds: string[];
   color: string;
   from: BallPoint;
   to: BallPoint;
@@ -100,6 +103,12 @@ export type RealtimeBallMoveMessage = {
   to: BallPoint;
   durationMs: number;
   seq: number;
+  sentAt: number;
+};
+
+export type RealtimeBallLeaveMessage = {
+  type: 'ballLeave';
+  playerId: string;
   sentAt: number;
 };
 
@@ -179,6 +188,7 @@ export type RealtimeCanvasMessage =
 export type RealtimeMessage =
   | RealtimeCursorMessage
   | RealtimeBallMoveMessage
+  | RealtimeBallLeaveMessage
   | RealtimeCanvasMessage
   | RealtimeTankGameMessage
   | RealtimePongStateMessage;
