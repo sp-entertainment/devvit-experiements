@@ -16,17 +16,12 @@ scheduler.post('/reminder', async (c) => {
   const { data } = await c.req.json<TaskRequest<ReminderJobData>>();
   const username = data?.username;
 
-  if (username) {
-    try {
-      await reddit.sendPrivateMessage({
-        to: username,
-        subject: 'Devvit Kitchen Sink reminder',
-        text: 'Here is the reminder you scheduled a moment ago via `scheduler.runJob`.',
-      });
-    } catch (error) {
-      console.error(`Failed to send reminder DM to ${username}:`, error);
-    }
-  }
+  if (!username) throw new Error('Reminder task is missing its username');
+  await reddit.sendPrivateMessage({
+    to: username,
+    subject: 'Devvit Kitchen Sink reminder',
+    text: 'Here is the reminder you scheduled a moment ago via `scheduler.runJob`.',
+  });
 
   return c.json<TaskResponse>({}, 200);
 });
@@ -36,11 +31,11 @@ scheduler.post('/reminder', async (c) => {
 // every app install/upgrade).
 scheduler.post('/daily-reset', async (c) => {
   await redis.del('trigger:comments-seen');
-  console.log('dailyReset cron task ran: reset the comment counter.');
+  console.info('dailyReset cron task ran: reset the comment counter.');
   return c.json<TaskResponse>({}, 200);
 });
 
 scheduler.onError((error, c) => {
   console.error('Scheduler route failed:', error);
-  return c.json<TaskResponse>({}, 200);
+  return c.json<TaskResponse>({}, 500);
 });

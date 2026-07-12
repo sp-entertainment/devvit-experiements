@@ -15,9 +15,6 @@ type PaymentHandlerResponse =
 
 const entitlementKey = () => `entitlement:${context.userId ?? 'unknown'}`;
 
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
-
 // devvit.json `payments.endpoints.fulfillOrder` (required): called once a purchase is
 // paid for. Grants the buyer an entitlement flag in Redis for each SKU purchased -
 // swap this for whatever "unlock" logic your app needs (removing ads, unlocking
@@ -32,10 +29,7 @@ payments.post('/fulfill', async (c) => {
     return c.json<PaymentHandlerResponse>({ success: true }, 200);
   } catch (error) {
     console.error(`Failed to fulfill order ${order.id}:`, error);
-    return c.json<PaymentHandlerResponse>(
-      { success: false, reason: 'fulfillment failed' },
-      200
-    );
+    throw error;
   }
 });
 
@@ -44,8 +38,13 @@ payments.post('/fulfill', async (c) => {
 payments.post('/refund', async (c) => {
   const order = await c.req.json<OrderRequest>();
 
-  for (const product of order.products) {
-    await redis.hDel(entitlementKey(), [product.sku]);
+  try {
+    for (const product of order.products) {
+      await redis.hDel(entitlementKey(), [product.sku]);
+    }
+  } catch (error) {
+    console.error(`Failed to refund order ${order.id}:`, error);
+    throw error;
   }
 
   return c.json<PaymentHandlerResponse>({ success: true }, 200);
@@ -54,7 +53,7 @@ payments.post('/refund', async (c) => {
 payments.onError((error, c) => {
   console.error('Payment route failed:', error);
   return c.json<PaymentHandlerResponse>(
-    { success: false, reason: errorMessage(error) },
-    200
+    { success: false, reason: 'Payment processing failed' },
+    500
   );
 });

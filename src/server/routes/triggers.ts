@@ -14,9 +14,6 @@ import { recordTrigger } from '../core/devvitEvents';
 
 export const triggers = new Hono();
 
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
-
 const short = (value: string | undefined) => (value ?? '').slice(0, 80);
 
 const userName = (user: { name: string } | undefined) =>
@@ -40,27 +37,16 @@ const commentSummary = (
 
 // Fires once, the moment a moderator installs the app in a subreddit.
 triggers.post('/on-app-install', async (c) => {
-  try {
-    const post = await createPost();
-    const input = await c.req.json<OnAppInstallRequest>();
+  const post = await createPost();
+  const input = await c.req.json<OnAppInstallRequest>();
 
-    return c.json<TriggerResponse>(
-      {
-        status: 'success',
-        message: `Post created in subreddit ${context.subredditName} with id ${post.id} (trigger: ${input.type})`,
-      },
-      200
-    );
-  } catch (error) {
-    console.error(`Error creating post: ${error}`);
-    return c.json<TriggerResponse>(
-      {
-        status: 'error',
-        message: 'Failed to create post',
-      },
-      400
-    );
-  }
+  return c.json<TriggerResponse>(
+    {
+      status: 'success',
+      message: `Post created in subreddit ${context.subredditName} with id ${post.id} (trigger: ${input.type})`,
+    },
+    200
+  );
 });
 
 // Fires every time any comment is created anywhere in the subreddit. Safe,
@@ -74,7 +60,7 @@ triggers.post('/on-comment-create', async (c) => {
     subreddit: subredditName(input.subreddit),
   });
 
-  console.log(
+  console.info(
     `onCommentCreate: comment ${input.comment?.id} by u/${input.author?.name} (running total: ${total})`
   );
 
@@ -132,8 +118,8 @@ triggers.onError((error, c) => {
   return c.json<TriggerResponse>(
     {
       status: 'error',
-      message: errorMessage(error),
+      message: 'Trigger processing failed',
     },
-    200
+    500
   );
 });
