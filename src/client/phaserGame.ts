@@ -11,6 +11,7 @@ import { traceClientLog } from './clientLogs';
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Phaser.Types.Core.GameConfig = {
   type: AUTO,
+  audio: { noAudio: true },
   backgroundColor: '#028af8',
   scale: {
     // Keep a fixed game resolution but automatically scale it to fit within the available

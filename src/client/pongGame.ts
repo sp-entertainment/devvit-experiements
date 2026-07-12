@@ -1057,6 +1057,7 @@ const isFreshForView = (lastSeenAt: number, now: number): boolean =>
 
 const config = (controls: PongGameControls): Phaser.Types.Core.GameConfig => ({
   type: AUTO,
+  audio: { noAudio: true },
   backgroundColor: '#000000',
   render: { roundPixels: true },
   scale: {

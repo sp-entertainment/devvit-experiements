@@ -118,6 +118,7 @@ class LightingHallwayScene extends Phaser.Scene {
 
 const config: Phaser.Types.Core.GameConfig = {
   type: WEBGL,
+  audio: { noAudio: true },
   backgroundColor: '#06080d',
   pixelArt: true,
   render: {

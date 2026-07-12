@@ -401,6 +401,7 @@ const config = (
   controls: SharedCanvasControls
 ): Phaser.Types.Core.GameConfig => ({
   type: AUTO,
+  audio: { noAudio: true },
   backgroundColor: '#0f1117',
   scale: {
     mode: Phaser.Scale.FIT,

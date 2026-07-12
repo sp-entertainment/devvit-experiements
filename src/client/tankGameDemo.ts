@@ -718,6 +718,7 @@ class TankGameScene extends Phaser.Scene {
 
 const config = (controls: TankGameControls): Phaser.Types.Core.GameConfig => ({
   type: AUTO,
+  audio: { noAudio: true },
   backgroundColor: '#111827',
   scale: {
     mode: Phaser.Scale.FIT,
