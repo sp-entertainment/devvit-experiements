@@ -387,6 +387,7 @@ class SmoothMovementScene extends Phaser.Scene {
 
 const config: Phaser.Types.Core.GameConfig = {
   type: AUTO,
+  audio: { noAudio: true },
   backgroundColor: '#101624',
   scale: {
     mode: Phaser.Scale.FIT,
