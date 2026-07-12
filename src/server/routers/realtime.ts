@@ -30,6 +30,7 @@ import {
   type BallState,
   type CanvasItem,
   type RealtimeBallMoveMessage,
+  type RealtimeCanvasPutBatchMessage,
   type RealtimeCanvasEraseMessage,
   type RealtimeCanvasPutMessage,
   type RealtimeCursorMessage,
@@ -65,6 +66,22 @@ const colorSchema = z
   .refine((color) => CANVAS_COLORS.includes(color), {
     message: 'Unsupported canvas color',
   });
+
+const canvasPixelInputSchema = z.object({
+  col: z
+    .number()
+    .int()
+    .min(0)
+    .max(CANVAS_GRID_COLS - 1),
+  row: z
+    .number()
+    .int()
+    .min(0)
+    .max(CANVAS_GRID_ROWS - 1),
+  color: colorSchema,
+});
+
+type CanvasPixelInput = z.infer<typeof canvasPixelInputSchema>;
 
 const canvasPixelItemSchema = z.object({
   kind: z.literal('pixel'),
@@ -308,6 +325,56 @@ const cleanupCanvasTransaction = async (
   }
 };
 
+const putCanvasPixels = async (
+  postId: string,
+  userId: string,
+  username: string,
+  pixels: CanvasPixelInput[]
+): Promise<CanvasItem[]> => {
+  const key = sharedCanvasKey(postId);
+  const revisionKey = sharedCanvasRevisionKey(postId);
+  return await retryRedisTransaction(async () => {
+    const transaction = await redis.watch(key, revisionKey);
+    let multiStarted = false;
+    try {
+      const revision = nextCanvasRevision(
+        parseCanvasRevision(await redis.get(revisionKey))
+      );
+      const itemsById = new Map<string, CanvasItem>();
+      const updatedAt = Date.now();
+      for (const pixel of pixels) {
+        const item: CanvasItem = {
+          kind: 'pixel',
+          id: `p:${pixel.col}:${pixel.row}`,
+          userId,
+          username,
+          color: pixel.color,
+          col: pixel.col,
+          row: pixel.row,
+          revision,
+          updatedAt,
+        };
+        itemsById.set(item.id, item);
+      }
+      const items = [...itemsById.values()];
+
+      await transaction.multi();
+      multiStarted = true;
+      await transaction.hSet(
+        key,
+        Object.fromEntries(items.map((item) => [item.id, JSON.stringify(item)]))
+      );
+      await transaction.set(revisionKey, String(revision));
+      const result = await transaction.exec();
+      if (result.length === 0) throw redisTransactionConflictError();
+      return items;
+    } catch (error) {
+      await cleanupCanvasTransaction(transaction, multiStarted, error);
+      throw error;
+    }
+  });
+};
+
 const readCanvasSnapshot = async (
   postId: string
 ): Promise<{ items: CanvasItem[]; revision: number }> =>
@@ -490,56 +557,12 @@ export const realtimeRouter = router({
     }),
 
     putPixel: authenticatedProcedure
-      .input(
-        z.object({
-          col: z
-            .number()
-            .int()
-            .min(0)
-            .max(CANVAS_GRID_COLS - 1),
-          row: z
-            .number()
-            .int()
-            .min(0)
-            .max(CANVAS_GRID_ROWS - 1),
-          color: colorSchema,
-        })
-      )
+      .input(canvasPixelInputSchema)
       .mutation(async ({ input }) => {
         const postId = requirePostId();
         const { userId, username } = requireUser();
-        const key = sharedCanvasKey(postId);
-        const revisionKey = sharedCanvasRevisionKey(postId);
-        const item = await retryRedisTransaction(async () => {
-          const transaction = await redis.watch(key, revisionKey);
-          let multiStarted = false;
-          try {
-            const revision = nextCanvasRevision(
-              parseCanvasRevision(await redis.get(revisionKey))
-            );
-            const next: CanvasItem = {
-              kind: 'pixel',
-              id: `p:${input.col}:${input.row}`,
-              userId,
-              username,
-              color: input.color,
-              col: input.col,
-              row: input.row,
-              revision,
-              updatedAt: Date.now(),
-            };
-            await transaction.multi();
-            multiStarted = true;
-            await transaction.hSet(key, { [next.id]: JSON.stringify(next) });
-            await transaction.set(revisionKey, String(revision));
-            const result = await transaction.exec();
-            if (result.length === 0) throw redisTransactionConflictError();
-            return next;
-          } catch (error) {
-            await cleanupCanvasTransaction(transaction, multiStarted, error);
-            throw error;
-          }
-        });
+        const [item] = await putCanvasPixels(postId, userId, username, [input]);
+        if (!item) throw new Error('Canvas pixel write produced no item');
         const message: RealtimeCanvasPutMessage = {
           type: 'canvasPut',
           item,
@@ -551,6 +574,41 @@ export const realtimeRouter = router({
             console.warn('Failed to broadcast shared canvas pixel:', error);
           });
         return { item };
+      }),
+
+    putPixels: authenticatedProcedure
+      .input(
+        z.object({
+          pixels: z
+            .array(canvasPixelInputSchema)
+            .min(1)
+            .max(CANVAS_GRID_COLS * CANVAS_GRID_ROWS),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const postId = requirePostId();
+        const { userId, username } = requireUser();
+        const items = await putCanvasPixels(
+          postId,
+          userId,
+          username,
+          input.pixels
+        );
+        const revision = items[0]?.revision;
+        if (revision === undefined)
+          throw new Error('Canvas pixel batch write produced no items');
+        const message: RealtimeCanvasPutBatchMessage = {
+          type: 'canvasPutBatch',
+          items,
+          revision,
+          sentAt: Date.now(),
+        };
+        await realtime
+          .send<RealtimeCanvasPutBatchMessage>(postId, message)
+          .catch((error) => {
+            console.warn('Failed to broadcast shared canvas pixels:', error);
+          });
+        return { items, revision };
       }),
 
     putText: authenticatedProcedure
