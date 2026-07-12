@@ -52,6 +52,7 @@ import {
   CANVAS_COLORS,
   CANVAS_ERASER_MAX_RADIUS,
   CANVAS_ERASER_MIN_RADIUS,
+  CANVAS_MAX_TEXT_LENGTH,
 } from '../../shared/realtime';
 import { startRealtimeStressTab } from '../realtimeStress';
 import { buildAgentConsole } from './agentConsole';
@@ -1515,7 +1516,7 @@ const buildSharedCanvas = (container: HTMLElement) => {
   container.append(
     sectionHeading('Shared Canvas'),
     paragraph(
-      'Dedicated realtime channel example: click to add pixels, click in Text mode to type words, or erase anything on the shared post canvas.'
+      'Dedicated realtime channel example: click to add pixels, enter text and tap its destination in Text mode, or erase anything on the shared post canvas.'
     )
   );
 
@@ -1549,6 +1550,16 @@ const buildSharedCanvas = (container: HTMLElement) => {
   addToolButton('pixel', 'Pixel');
   addToolButton('text', 'Text');
   addToolButton('erase', 'Erase');
+
+  const textLabel = el('label', 'ks-canvas-text');
+  const textLabelText = el('span');
+  textLabelText.textContent = 'Text';
+  const textInput = document.createElement('input');
+  textInput.type = 'text';
+  textInput.maxLength = CANVAS_MAX_TEXT_LENGTH;
+  textInput.placeholder = 'Enter text, then tap canvas';
+  textLabel.append(textLabelText, textInput);
+  toolbar.append(textLabel);
 
   const colorGroup = el('div', 'ks-swatch-group');
   for (const swatch of CANVAS_COLORS) {
@@ -1601,6 +1612,10 @@ const buildSharedCanvas = (container: HTMLElement) => {
     getTool: () => tool,
     getColor: () => color,
     getEraserRadius: () => eraserRadius,
+    getText: () => textInput.value,
+    clearText: () => {
+      textInput.value = '';
+    },
     setStatus: (text) => {
       status.textContent = text;
     },

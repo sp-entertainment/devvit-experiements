@@ -15,6 +15,7 @@ export const CANVAS_GRID_COLS = 64;
 export const CANVAS_GRID_ROWS = 48;
 export const CANVAS_CELL_SIZE = CANVAS_WORLD_WIDTH / CANVAS_GRID_COLS;
 export const CANVAS_MAX_TEXT_LENGTH = 40;
+export const CANVAS_MAX_TEXT_ITEMS = 200;
 export const CANVAS_ERASER_MIN_RADIUS = 16;
 export const CANVAS_ERASER_MAX_RADIUS = 96;
 export const CANVAS_COLORS = [
@@ -31,6 +32,8 @@ export const CANVAS_COLORS = [
 export const smoothMovementBallsKey = (postId: string) =>
   `smooth-movement:v${SMOOTH_MOVEMENT_STATE_VERSION}:balls:${postId}`;
 export const sharedCanvasKey = (postId: string) => `canvas:${postId}`;
+export const sharedCanvasRevisionKey = (postId: string) =>
+  `canvas:${postId}:revision`;
 
 export type BallPoint = {
   x: number;
@@ -58,6 +61,7 @@ export type CanvasPixelItem = {
   color: string;
   col: number;
   row: number;
+  revision: number;
   updatedAt: number;
 };
 
@@ -70,6 +74,7 @@ export type CanvasTextItem = {
   x: number;
   y: number;
   text: string;
+  revision: number;
   updatedAt: number;
 };
 
@@ -154,6 +159,7 @@ export type RealtimeCanvasPutMessage = {
 export type RealtimeCanvasEraseMessage = {
   type: 'canvasErase';
   ids: string[];
+  revision: number;
   sentAt: number;
 };
 

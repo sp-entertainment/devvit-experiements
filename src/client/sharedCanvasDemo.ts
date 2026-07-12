@@ -9,7 +9,6 @@ import {
   CANVAS_COLORS,
   CANVAS_GRID_COLS,
   CANVAS_GRID_ROWS,
-  CANVAS_MAX_TEXT_LENGTH,
   CANVAS_WORLD_HEIGHT,
   CANVAS_WORLD_WIDTH,
   type CanvasItem,
@@ -22,6 +21,8 @@ export type SharedCanvasControls = {
   getTool: () => SharedCanvasTool;
   getColor: () => string;
   getEraserRadius: () => number;
+  getText: () => string;
+  clearText: () => void;
   setStatus: (text: string) => void;
 };
 
@@ -30,12 +31,12 @@ type CanvasView = {
   item: CanvasItem;
 };
 
-type DraftText = {
-  object: Phaser.GameObjects.Text;
+type PendingTextRequest = {
   x: number;
   y: number;
+  text: string;
   color: string;
-  value: string;
+  requestId: string;
 };
 
 const colorNumber = (color: string) => {
@@ -53,6 +54,8 @@ const defaultControls: SharedCanvasControls = {
   getTool: () => 'pixel',
   getColor: () => CANVAS_COLORS[5] ?? '#38bdf8',
   getEraserRadius: () => 32,
+  getText: () => '',
+  clearText: () => {},
   setStatus: () => {},
 };
 
@@ -60,10 +63,14 @@ class SharedCanvasScene extends Phaser.Scene {
   controls: SharedCanvasControls;
   items = new Map<string, CanvasView>();
   paintedThisDrag = new Set<string>();
-  draft: DraftText | undefined;
   unsubscribeRealtime: (() => void) | undefined;
   lastEraseAt = 0;
   active = false;
+  canvasRevision = 0;
+  snapshotPromise: Promise<void> | undefined;
+  snapshotRefreshRequested = false;
+  textCommitInFlight = false;
+  pendingTextRequest: PendingTextRequest | undefined;
 
   constructor(controls: SharedCanvasControls) {
     super('SharedCanvasScene');
@@ -89,10 +96,6 @@ class SharedCanvasScene extends Phaser.Scene {
       if (this.active && pointer.isDown) this.handlePointer(pointer, false);
     });
     this.input.on('pointerup', () => this.paintedThisDrag.clear());
-    this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
-      if (this.active) this.handleKey(event);
-    });
-
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
     window.addEventListener('focus', this.handleFocus);
@@ -132,36 +135,54 @@ class SharedCanvasScene extends Phaser.Scene {
     if (this.active) this.controls.setStatus(text);
   }
 
-  async loadSnapshot(showStatus = true) {
-    const requestedAt = Date.now();
-    try {
-      const snapshot = await trpc.realtime.canvas.snapshot.query();
-      if (!this.active) return;
-
-      this.applySnapshot(snapshot.items, requestedAt);
-      if (showStatus) {
-        this.setStatus(`Connected. ${snapshot.items.length} marks loaded.`);
-        console.info('Loaded shared canvas snapshot:', snapshot.items.length);
-      }
-    } catch (error) {
-      if (!this.active) return;
-
-      const message = errorMessage(error);
-      this.setStatus(`Canvas load failed: ${message}`);
-      console.error('Failed to load shared canvas:', error);
-      showToast(`Canvas load failed: ${message}`);
+  loadSnapshot(showStatus = true): Promise<void> {
+    if (this.snapshotPromise) {
+      this.snapshotRefreshRequested = true;
+      return this.snapshotPromise;
     }
+    const request = (async () => {
+      try {
+        const snapshot = await trpc.realtime.canvas.snapshot.query();
+        if (!this.active) return;
+
+        this.applySnapshot(snapshot.items, snapshot.revision);
+        if (showStatus) {
+          this.setStatus(`Connected. ${snapshot.items.length} marks loaded.`);
+          console.info('Loaded shared canvas snapshot:', snapshot.items.length);
+        }
+      } catch (error) {
+        if (!this.active) return;
+
+        const message = errorMessage(error);
+        this.setStatus(`Canvas load failed: ${message}`);
+        console.error('Failed to load shared canvas:', error);
+        showToast(`Canvas load failed: ${message}`);
+      }
+    })().finally(() => {
+      if (this.snapshotPromise === request) {
+        this.snapshotPromise = undefined;
+        if (this.active && this.snapshotRefreshRequested) {
+          this.snapshotRefreshRequested = false;
+          void this.loadSnapshot(false);
+        }
+      }
+    });
+    this.snapshotPromise = request;
+    return request;
   }
 
-  applySnapshot(items: CanvasItem[], requestedAt: number) {
-    if (!this.active) return;
+  applySnapshot(items: CanvasItem[], revision: number) {
+    if (!this.active || revision < this.canvasRevision) return;
 
     const ids = new Set(items.map((item) => item.id));
     for (const [id, view] of this.items) {
-      if (!ids.has(id) && view.item.updatedAt <= requestedAt)
-        this.applyErase([id]);
+      if (!ids.has(id)) {
+        view.object.destroy();
+        this.items.delete(id);
+      }
     }
-    for (const item of items) this.applyPut(item);
+    for (const item of items) this.renderPut(item);
+    this.canvasRevision = revision;
   }
 
   handlePointer(pointer: Phaser.Input.Pointer, freshClick: boolean) {
@@ -170,11 +191,10 @@ class SharedCanvasScene extends Phaser.Scene {
     const tool = this.controls.getTool();
 
     if (tool === 'text') {
-      if (freshClick) this.startDraft(x, y);
+      if (freshClick) void this.shareText(x, y);
       return;
     }
 
-    this.cancelDraft();
     if (tool === 'pixel') {
       this.paintPixel(x, y);
     } else {
@@ -208,7 +228,7 @@ class SharedCanvasScene extends Phaser.Scene {
         });
         if (!this.active) return;
 
-        this.applyPut(item);
+        this.applyPut(item, item.revision);
         this.setStatus('Pixel shared.');
       } catch (error) {
         if (!this.active) return;
@@ -230,14 +250,14 @@ class SharedCanvasScene extends Phaser.Scene {
 
     void (async () => {
       try {
-        const { ids } = await trpc.realtime.canvas.eraseAt.mutate({
+        const { ids, revision } = await trpc.realtime.canvas.eraseAt.mutate({
           x: Math.round(x),
           y: Math.round(y),
           radius: this.controls.getEraserRadius(),
         });
         if (!this.active) return;
 
-        this.applyErase(ids);
+        this.applyErase(ids, revision);
         this.setStatus(
           ids.length ? `Erased ${ids.length} mark(s).` : 'Nothing to erase.'
         );
@@ -252,74 +272,36 @@ class SharedCanvasScene extends Phaser.Scene {
     })();
   }
 
-  startDraft(x: number, y: number) {
-    if (!this.active) return;
-
-    this.cancelDraft();
-    const color = this.controls.getColor();
-    const object = this.add
-      .text(x, y, '|', {
-        fontFamily: 'Arial Black',
-        fontSize: 24,
-        color,
-        stroke: '#020617',
-        strokeThickness: 4,
-      })
-      .setOrigin(0, 0.5)
-      .setDepth(3);
-
-    this.draft = { object, x, y, color, value: '' };
-    this.setStatus('Type, then press Enter to share.');
-  }
-
-  handleKey(event: KeyboardEvent) {
-    if (!this.draft) return;
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      this.cancelDraft();
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-      void this.commitDraft();
-    } else if (event.key === 'Backspace') {
-      event.preventDefault();
-      this.draft.value = this.draft.value.slice(0, -1);
-      this.refreshDraft();
-    } else if (
-      event.key.length === 1 &&
-      this.draft.value.length < CANVAS_MAX_TEXT_LENGTH
-    ) {
-      event.preventDefault();
-      this.draft.value += event.key;
-      this.refreshDraft();
-    }
-  }
-
-  refreshDraft() {
-    if (!this.draft) return;
-    this.draft.object.setText(`${this.draft.value}|`);
-  }
-
-  async commitDraft() {
-    if (!this.draft) return;
-
-    const draft = this.draft;
-    const text = draft.value.trim();
+  async shareText(x: number, y: number) {
+    if (this.textCommitInFlight) return;
+    const text = this.controls.getText().trim();
     if (!text) {
-      this.cancelDraft();
+      this.setStatus('Enter text in the toolbar, then tap the canvas.');
       return;
     }
 
+    const request =
+      this.pendingTextRequest?.text === text
+        ? this.pendingTextRequest
+        : {
+            x: Math.round(x),
+            y: Math.round(y),
+            text,
+            color: this.controls.getColor(),
+            requestId: crypto.randomUUID(),
+          };
+    this.pendingTextRequest = request;
+    this.textCommitInFlight = true;
     try {
       const { item } = await trpc.realtime.canvas.putText.mutate({
-        x: Math.round(draft.x),
-        y: Math.round(draft.y),
-        text,
-        color: draft.color,
+        ...request,
       });
       if (!this.active) return;
 
-      this.applyPut(item);
+      this.applyPut(item, item.revision);
+      if (this.pendingTextRequest === request)
+        this.pendingTextRequest = undefined;
+      this.controls.clearText();
       this.setStatus('Text shared.');
     } catch (error) {
       if (!this.active) return;
@@ -329,30 +311,33 @@ class SharedCanvasScene extends Phaser.Scene {
       console.error('Failed to share canvas text:', error);
       showToast(`Text failed: ${message}`);
     } finally {
-      if (this.active) this.cancelDraft();
+      this.textCommitInFlight = false;
     }
-  }
-
-  cancelDraft() {
-    this.draft?.object.destroy();
-    this.draft = undefined;
   }
 
   applyRealtime(message: RealtimeCanvasMessage) {
     if (!this.active) return;
 
     if (message.type === 'canvasPut') {
-      this.applyPut(message.item);
+      this.applyPut(message.item, message.item.revision);
     } else {
-      this.applyErase(message.ids);
+      this.applyErase(message.ids, message.revision);
     }
   }
 
-  applyPut(item: CanvasItem) {
+  applyPut(item: CanvasItem, revision: number) {
+    if (!this.active || revision <= this.canvasRevision) return;
+    const missedRevision = revision > this.canvasRevision + 1;
+    this.renderPut(item);
+    this.canvasRevision = revision;
+    if (missedRevision) void this.loadSnapshot(false);
+  }
+
+  renderPut(item: CanvasItem) {
     if (!this.active) return;
 
     const current = this.items.get(item.id);
-    if (current?.item.updatedAt === item.updatedAt) return;
+    if (current && current.item.revision >= item.revision) return;
     current?.object.destroy();
 
     if (item.kind === 'pixel') {
@@ -384,13 +369,16 @@ class SharedCanvasScene extends Phaser.Scene {
     this.items.set(item.id, { object, item });
   }
 
-  applyErase(ids: string[]) {
-    if (!this.active) return;
+  applyErase(ids: string[], revision: number) {
+    if (!this.active || revision <= this.canvasRevision) return;
+    const missedRevision = revision > this.canvasRevision + 1;
 
     for (const id of ids) {
       this.items.get(id)?.object.destroy();
       this.items.delete(id);
     }
+    this.canvasRevision = revision;
+    if (missedRevision) void this.loadSnapshot(false);
   }
 
   cleanup() {
@@ -402,7 +390,6 @@ class SharedCanvasScene extends Phaser.Scene {
     );
     window.removeEventListener('focus', this.handleFocus);
     window.removeEventListener('pageshow', this.handlePageShow);
-    this.cancelDraft();
     for (const { object } of this.items.values()) {
       object.destroy();
     }

@@ -11,7 +11,11 @@ import {
   redisTransactionConflictError,
   retryRedisTransaction,
 } from '../redisTransactionRetry';
-import { sharedCanvasKey, smoothMovementBallsKey } from '../../shared/realtime';
+import {
+  sharedCanvasKey,
+  sharedCanvasRevisionKey,
+  smoothMovementBallsKey,
+} from '../../shared/realtime';
 
 const requirePostId = () => {
   if (!context.postId)
@@ -33,8 +37,9 @@ export const redisRouter = router({
     }),
     clearSharedCanvas: moderatorProcedure.mutation(async () => {
       const key = sharedCanvasKey(requirePostId());
-      await redis.del(key);
-      return { deleted: [key] };
+      const revisionKey = sharedCanvasRevisionKey(requirePostId());
+      await redis.del(key, revisionKey);
+      return { deleted: [key, revisionKey] };
     }),
     clearRedisExamples: moderatorProcedure.mutation(async () => {
       const postId = requirePostId();
@@ -53,6 +58,7 @@ export const redisRouter = router({
       const keys = [
         smoothMovementBallsKey(postId),
         sharedCanvasKey(postId),
+        sharedCanvasRevisionKey(postId),
         `counter:${postId}`,
         `profile:${postId}:${requireUsername()}`,
         `leaderboard:${postId}`,
