@@ -85,10 +85,9 @@ const cleanupPreviousFailure = async (): Promise<void> => {
   if (!failedRunId) return;
   try {
     await cleanupRun(await loadRun(failedRunId));
-  } catch (error) {
-    console.warn('Unable to load the previous failed agent run:', error);
-  } finally {
     await redis.del(lastFailedRunKey);
+  } catch (error) {
+    console.warn('Unable to clean up the previous failed agent run:', error);
   }
 };
 
