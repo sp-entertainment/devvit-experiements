@@ -6,6 +6,10 @@ export class GameOver extends Scene {
   background: Phaser.GameObjects.Image;
   gameover_text: Phaser.GameObjects.Text;
 
+  private readonly handleResize = (gameSize: Phaser.Structs.Size): void => {
+    this.updateLayout(gameSize.width, gameSize.height);
+  };
+
   constructor() {
     super('GameOver');
   }
@@ -37,9 +41,9 @@ export class GameOver extends Scene {
     this.updateLayout(this.scale.width, this.scale.height);
 
     // Update layout on canvas resize / orientation change
-    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
-      const { width, height } = gameSize;
-      this.updateLayout(width, height);
+    this.scale.on('resize', this.handleResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off('resize', this.handleResize);
     });
 
     // Return to Main Menu on tap / click

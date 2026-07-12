@@ -23,11 +23,20 @@ export class Game extends Scene {
   >();
   lastCursorBroadcastAt = 0;
 
+  private sceneGeneration = 0;
+  private counterRequest = 0;
+  private counterMutationRequest: number | undefined;
+  private readonly handleResize = (gameSize: Phaser.Structs.Size): void => {
+    this.updateLayout(gameSize.width, gameSize.height);
+  };
+
   constructor() {
     super('Game');
   }
 
   create() {
+    const generation = ++this.sceneGeneration;
+    this.counterMutationRequest = undefined;
     traceClientLog('Creating Phaser main game scene.');
     // Configure camera & background
     this.camera = this.cameras.main;
@@ -53,16 +62,7 @@ export class Game extends Scene {
 
     // Fetch the initial counter value from the server (via tRPC, backed by Redis)
     // and update the UI.
-    void (async () => {
-      try {
-        const { count } = await trpc.redis.counter.get.query();
-        this.count = count;
-        this.updateCountText();
-        console.info('Loaded Phaser counter:', count);
-      } catch (error) {
-        console.error('Failed to fetch initial count:', error);
-      }
-    })();
+    void this.loadCounter(generation);
 
     // Button styling helper
     const createButton = (
@@ -80,7 +80,7 @@ export class Game extends Scene {
           padding: {
             x: 25,
             y: 12,
-          } as Phaser.Types.GameObjects.Text.TextPadding,
+          },
         })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
@@ -97,16 +97,8 @@ export class Game extends Scene {
       this.scale.height * 0.55,
       'Increment',
       '#00ff00',
-      async () => {
-        traceClientLog('Incrementing Phaser counter.');
-        try {
-          const { count } = await trpc.redis.counter.increment.mutate();
-          this.count = count;
-          this.updateCountText();
-          console.info('Incremented Phaser counter:', count);
-        } catch (error) {
-          console.error('Failed to increment count:', error);
-        }
+      () => {
+        void this.changeCounter('increment', generation);
       }
     );
 
@@ -115,16 +107,8 @@ export class Game extends Scene {
       this.scale.height * 0.65,
       'Decrement',
       '#ff5555',
-      async () => {
-        traceClientLog('Decrementing Phaser counter.');
-        try {
-          const { count } = await trpc.redis.counter.decrement.mutate();
-          this.count = count;
-          this.updateCountText();
-          console.info('Decremented Phaser counter:', count);
-        } catch (error) {
-          console.error('Failed to decrement count:', error);
-        }
+      () => {
+        void this.changeCounter('decrement', generation);
       }
     );
 
@@ -141,14 +125,92 @@ export class Game extends Scene {
 
     // Setup responsive layout
     this.updateLayout(this.scale.width, this.scale.height);
-    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
-      const { width, height } = gameSize;
-      this.updateLayout(width, height);
+    this.scale.on('resize', this.handleResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off('resize', this.handleResize);
+      this.sceneGeneration += 1;
     });
 
     this.setupRealtimeCursorSync();
 
     // No automatic navigation to GameOver – users can stay in this scene.
+  }
+
+  private isCurrentGeneration(generation: number): boolean {
+    return this.sceneGeneration === generation && this.sys.isActive();
+  }
+
+  private async loadCounter(generation: number): Promise<void> {
+    const request = ++this.counterRequest;
+    try {
+      const { count } = await trpc.redis.counter.get.query();
+      if (
+        !this.isCurrentGeneration(generation) ||
+        request !== this.counterRequest
+      ) {
+        return;
+      }
+      this.count = count;
+      this.updateCountText();
+      console.info('Loaded Phaser counter:', count);
+    } catch (error) {
+      if (this.isCurrentGeneration(generation)) {
+        console.error('Failed to fetch initial count:', error);
+      }
+    }
+  }
+
+  private setCounterButtonsEnabled(enabled: boolean): void {
+    for (const button of [this.incButton, this.decButton]) {
+      button.setAlpha(enabled ? 1 : 0.6);
+      if (enabled) button.setInteractive({ useHandCursor: true });
+      else button.disableInteractive();
+    }
+  }
+
+  private async changeCounter(
+    operation: 'increment' | 'decrement',
+    generation: number
+  ): Promise<void> {
+    if (this.counterMutationRequest !== undefined) return;
+    const request = ++this.counterRequest;
+    this.counterMutationRequest = request;
+    this.setCounterButtonsEnabled(false);
+    traceClientLog(
+      `${operation === 'increment' ? 'Incrementing' : 'Decrementing'} Phaser counter.`
+    );
+    try {
+      const result =
+        operation === 'increment'
+          ? await trpc.redis.counter.increment.mutate()
+          : await trpc.redis.counter.decrement.mutate();
+      if (
+        !this.isCurrentGeneration(generation) ||
+        request !== this.counterRequest
+      ) {
+        return;
+      }
+      this.count = result.count;
+      this.updateCountText();
+      console.info(
+        `${operation === 'increment' ? 'Incremented' : 'Decremented'} Phaser counter:`,
+        result.count
+      );
+    } catch (error) {
+      if (this.isCurrentGeneration(generation)) {
+        console.error(`Failed to ${operation} count:`, error);
+      }
+    } finally {
+      if (this.counterMutationRequest === request) {
+        this.counterMutationRequest = undefined;
+      }
+      if (
+        this.isCurrentGeneration(generation) &&
+        this.counterMutationRequest === undefined
+      ) {
+        this.setCounterButtonsEnabled(true);
+      }
+    }
   }
 
   /** Realtime demo: broadcast this player's pointer position (throttled) and render
