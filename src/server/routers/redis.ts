@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { context, redis } from '@devvit/web/server';
-import { router, publicProcedure } from '../trpc';
+import {
+  authenticatedProcedure,
+  moderatorProcedure,
+  publicProcedure,
+  router,
+} from '../trpc';
 import { sharedCanvasKey, smoothMovementBallsKey } from '../../shared/realtime';
 
 const requirePostId = () => {
@@ -16,17 +21,17 @@ const requireUsername = () => {
 
 export const redisRouter = router({
   debug: router({
-    clearSmoothMovement: publicProcedure.mutation(async () => {
+    clearSmoothMovement: moderatorProcedure.mutation(async () => {
       const key = smoothMovementBallsKey(requirePostId());
       await redis.del(key);
       return { deleted: [key] };
     }),
-    clearSharedCanvas: publicProcedure.mutation(async () => {
+    clearSharedCanvas: moderatorProcedure.mutation(async () => {
       const key = sharedCanvasKey(requirePostId());
       await redis.del(key);
       return { deleted: [key] };
     }),
-    clearRedisExamples: publicProcedure.mutation(async () => {
+    clearRedisExamples: moderatorProcedure.mutation(async () => {
       const postId = requirePostId();
       const keys = [
         `counter:${postId}`,
@@ -38,7 +43,7 @@ export const redisRouter = router({
       await redis.del(...keys);
       return { deleted: keys };
     }),
-    clearCurrentPost: publicProcedure.mutation(async () => {
+    clearCurrentPost: moderatorProcedure.mutation(async () => {
       const postId = requirePostId();
       const keys = [
         smoothMovementBallsKey(postId),
@@ -70,12 +75,12 @@ export const redisRouter = router({
 
   // Hashes: redis.hSet / redis.hGetAll - store a small structured record per user.
   hashProfile: router({
-    get: publicProcedure.query(async () => {
+    get: authenticatedProcedure.query(async () => {
       return await redis.hGetAll(
         `profile:${requirePostId()}:${requireUsername()}`
       );
     }),
-    save: publicProcedure
+    save: authenticatedProcedure
       .input(
         z.object({
           favoriteColor: z.string().max(32),
@@ -103,7 +108,7 @@ export const redisRouter = router({
       const key = `leaderboard:${requirePostId()}`;
       return await redis.zRange(key, 0, -1, { by: 'rank', reverse: true });
     }),
-    addPoints: publicProcedure
+    addPoints: authenticatedProcedure
       .input(z.object({ points: z.number().int().min(1).max(100) }))
       .mutation(async ({ input }) => {
         const key = `leaderboard:${requirePostId()}`;
@@ -111,7 +116,7 @@ export const redisRouter = router({
         return { username: requireUsername(), score };
       }),
     mine: router({
-      get: publicProcedure.query(async () => {
+      get: authenticatedProcedure.query(async () => {
         const key = `leaderboard:${requirePostId()}`;
         const username = requireUsername();
         return {
@@ -119,7 +124,7 @@ export const redisRouter = router({
           score: (await redis.zScore(key, username)) ?? null,
         };
       }),
-      set: publicProcedure
+      set: authenticatedProcedure
         .input(z.object({ score: z.number().int().nonnegative().safe() }))
         .mutation(async ({ input }) => {
           const key = `leaderboard:${requirePostId()}`;

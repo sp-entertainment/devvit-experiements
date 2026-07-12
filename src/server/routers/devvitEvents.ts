@@ -1,6 +1,8 @@
 import { getDevvitEventSnapshot } from '../core/devvitEvents';
-import { router, publicProcedure } from '../trpc';
+import { moderatorProcedure, router } from '../trpc';
 
 export const devvitEventsRouter = router({
-  snapshot: publicProcedure.query(async () => await getDevvitEventSnapshot()),
+  snapshot: moderatorProcedure.query(
+    async () => await getDevvitEventSnapshot()
+  ),
 });

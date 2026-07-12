@@ -33,7 +33,7 @@ import {
   tankDistance,
   tankFacing,
 } from '../tankGameRules';
-import { publicProcedure, router } from '../trpc';
+import { authenticatedProcedure, publicProcedure, router } from '../trpc';
 
 const tankPointSchema = z.object({
   x: z
@@ -270,7 +270,7 @@ export const tankGameRouter = router({
       readUpdatesSince(requirePostId(), input.sinceVersion)
     ),
 
-  join: publicProcedure.mutation(async (): Promise<TankJoinResult> => {
+  join: authenticatedProcedure.mutation(async (): Promise<TankJoinResult> => {
     const postId = requirePostId();
     const { playerId, username } = requireUser();
     const now = Date.now();
@@ -366,7 +366,7 @@ export const tankGameRouter = router({
     };
   }),
 
-  act: publicProcedure
+  act: authenticatedProcedure
     .input(actionInputSchema)
     .mutation(async ({ input }): Promise<TankActionResult> => {
       const postId = requirePostId();
@@ -510,49 +510,58 @@ export const tankGameRouter = router({
       };
     }),
 
-  rematch: publicProcedure.mutation(async (): Promise<TankRematchResult> => {
-    const postId = requirePostId();
-    const { playerId } = requireUser();
-    const now = Date.now();
-    const result = await mutateState<{ accepted: boolean }>(postId, (state) => {
-      const isPlayer = state.players.some(
-        (player) => player.playerId === playerId
+  rematch: authenticatedProcedure.mutation(
+    async (): Promise<TankRematchResult> => {
+      const postId = requirePostId();
+      const { playerId } = requireUser();
+      const now = Date.now();
+      const result = await mutateState<{ accepted: boolean }>(
+        postId,
+        (state) => {
+          const isPlayer = state.players.some(
+            (player) => player.playerId === playerId
+          );
+          if (
+            !isPlayer ||
+            state.phase !== 'finished' ||
+            now < state.turnReadyAt
+          ) {
+            return { changed: false, state, value: { accepted: false } };
+          }
+
+          const players = state.players.map(resetPlayer);
+          const activePlayerId = randomPlayerId(players);
+          return {
+            changed: true,
+            state: {
+              ...state,
+              phase: 'playing',
+              players,
+              turnOrder: players.map((player) => player.playerId),
+              activePlayerId,
+              winnerPlayerId: null,
+              turnReadyAt: now,
+              lastAction: null,
+            },
+            value: { accepted: true },
+          };
+        }
       );
-      if (!isPlayer || state.phase !== 'finished' || now < state.turnReadyAt) {
-        return { changed: false, state, value: { accepted: false } };
+
+      if (result.value.accepted) {
+        console.info(
+          'Tank game rematch started:',
+          postId,
+          result.state.activePlayerId
+        );
       }
 
-      const players = state.players.map(resetPlayer);
-      const activePlayerId = randomPlayerId(players);
       return {
-        changed: true,
-        state: {
-          ...state,
-          phase: 'playing',
-          players,
-          turnOrder: players.map((player) => player.playerId),
-          activePlayerId,
-          winnerPlayerId: null,
-          turnReadyAt: now,
-          lastAction: null,
-        },
-        value: { accepted: true },
+        state: result.state,
+        selfPlayerId: playerId,
+        serverNow: Date.now(),
+        accepted: result.value.accepted,
       };
-    });
-
-    if (result.value.accepted) {
-      console.info(
-        'Tank game rematch started:',
-        postId,
-        result.state.activePlayerId
-      );
     }
-
-    return {
-      state: result.state,
-      selfPlayerId: playerId,
-      serverNow: Date.now(),
-      accepted: result.value.accepted,
-    };
-  }),
+  ),
 });

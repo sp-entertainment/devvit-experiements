@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { context, realtime, redis } from '@devvit/web/server';
-import { router, publicProcedure } from '../trpc';
+import { authenticatedProcedure, publicProcedure, router } from '../trpc';
 import {
   BALL_MARGIN,
   BALL_MOVE_MAX_DURATION_MS,
@@ -306,7 +306,7 @@ export const realtimeRouter = router({
       return { success: true };
     }),
 
-  joinBall: publicProcedure.mutation(async () => {
+  joinBall: authenticatedProcedure.mutation(async () => {
     const postId = requirePostId();
     const { playerId, userId, username } = requireUser();
     const key = smoothMovementBallsKey(postId);
@@ -327,7 +327,7 @@ export const realtimeRouter = router({
     };
   }),
 
-  moveBall: publicProcedure
+  moveBall: authenticatedProcedure
     .input(z.object({ to: ballPointSchema }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
@@ -379,7 +379,7 @@ export const realtimeRouter = router({
       return { items: await readCanvasItems(sharedCanvasKey(requirePostId())) };
     }),
 
-    putPixel: publicProcedure
+    putPixel: authenticatedProcedure
       .input(
         z.object({
           col: z
@@ -422,7 +422,7 @@ export const realtimeRouter = router({
         return { item };
       }),
 
-    putText: publicProcedure
+    putText: authenticatedProcedure
       .input(
         z.object({
           x: z.number().min(0).max(CANVAS_WORLD_WIDTH),
@@ -459,7 +459,7 @@ export const realtimeRouter = router({
         return { item };
       }),
 
-    eraseAt: publicProcedure
+    eraseAt: authenticatedProcedure
       .input(
         z.object({
           x: z.number().min(0).max(CANVAS_WORLD_WIDTH),

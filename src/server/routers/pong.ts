@@ -28,7 +28,7 @@ import {
   redisTransactionConflictError,
   retryRedisTransaction,
 } from '../redisTransactionRetry';
-import { publicProcedure, router } from '../trpc';
+import { authenticatedProcedure, publicProcedure, router } from '../trpc';
 
 const syncInputSchema = z.object({
   matchId: z.string().min(1),
@@ -215,7 +215,7 @@ export const pongRouter = router({
     return snapshotResult(state, Date.now());
   }),
 
-  join: publicProcedure.mutation(async (): Promise<PongJoinResult> => {
+  join: authenticatedProcedure.mutation(async (): Promise<PongJoinResult> => {
     const postId = requirePostId();
     const { playerId, username } = requireUser();
     const result = await mutateState<{ joined: boolean }>(
@@ -241,7 +241,7 @@ export const pongRouter = router({
     };
   }),
 
-  sync: publicProcedure
+  sync: authenticatedProcedure
     .input(syncInputSchema)
     .mutation(async ({ input }): Promise<PongSyncResult> => {
       const postId = requirePostId();
@@ -307,7 +307,7 @@ export const pongRouter = router({
         : { ...snapshot, accepted: false, reason: result.value.reason };
     }),
 
-  leave: publicProcedure.mutation(async (): Promise<PongLeaveResult> => {
+  leave: authenticatedProcedure.mutation(async (): Promise<PongLeaveResult> => {
     const postId = requirePostId();
     const { playerId } = requireUser();
     const result = await mutateState<{ left: boolean }>(
@@ -332,7 +332,7 @@ export const pongRouter = router({
     };
   }),
 
-  requestRematch: publicProcedure.mutation(
+  requestRematch: authenticatedProcedure.mutation(
     async (): Promise<PongRematchResult> => {
       const postId = requirePostId();
       const { playerId } = requireUser();

@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { context, payments, redis } from '@devvit/web/server';
-import { router, publicProcedure } from '../trpc';
+import {
+  authenticatedProcedure,
+  moderatorProcedure,
+  publicProcedure,
+  router,
+} from '../trpc';
 
 // NOTE: Payments are an @experimental Devvit capability denominated in Reddit Gold.
 // These read-only procedures work in the sandbox immediately, but actually charging
@@ -15,7 +20,7 @@ export const paymentsRouter = router({
   }),
 
   // payments.getOrders(): query this installation's order history (requires `limit`).
-  listOrders: publicProcedure
+  listOrders: moderatorProcedure
     .input(z.object({ limit: z.number().int().min(1).max(50).default(10) }))
     .query(async ({ input }) => {
       const { orders } = await payments.getOrders({ limit: input.limit });
@@ -24,7 +29,7 @@ export const paymentsRouter = router({
 
   // Reads the Redis entitlement flags granted by src/server/routes/payments.ts's
   // `fulfillOrder` handler for the calling user.
-  getMyEntitlements: publicProcedure.query(async () => {
-    return await redis.hGetAll(`entitlement:${context.userId ?? 'unknown'}`);
+  getMyEntitlements: authenticatedProcedure.query(async () => {
+    return await redis.hGetAll(`entitlement:${context.userId}`);
   }),
 });
