@@ -1,13 +1,16 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
 
-const root = new URL('..', import.meta.url).pathname;
-const sourceDirectory = join(root, 'src');
+const root = fileURLToPath(new URL('..', import.meta.url));
+const inputDirectories = ['public', 'src'];
 const extraFiles = [
   'devvit.json',
+  'package-lock.json',
   'package.json',
   'products.json',
+  'tools/build-id.mjs',
   'vite.config.ts',
 ];
 
@@ -23,22 +26,30 @@ const sourceFiles = async (directory) => {
   return files.flat().sort();
 };
 
-export const buildInputs = async () => [
-  ...(await sourceFiles(sourceDirectory)),
-  ...extraFiles.map((file) => join(root, file)),
-];
+export const buildInputs = async () =>
+  [
+    ...(
+      await Promise.all(
+        inputDirectories.map((directory) => sourceFiles(join(root, directory)))
+      )
+    ).flat(),
+    ...extraFiles.map((file) => join(root, file)),
+  ].sort();
 
-export const getBuildId = async () => {
+export const hashBuildInputs = async (paths, baseDirectory = root) => {
   const hash = createHash('sha256');
-  for (const path of await buildInputs()) {
-    hash.update(relative(root, path));
+  for (const path of [...paths].sort()) {
+    hash.update(relative(baseDirectory, path));
     hash.update('\0');
     hash.update(await readFile(path));
     hash.update('\0');
   }
-  return hash.digest('hex').slice(0, 12);
+  return hash.digest('hex');
 };
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+export const getBuildId = async () =>
+  (await hashBuildInputs(await buildInputs())).slice(0, 12);
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.stdout.write(`${await getBuildId()}\n`);
 }
