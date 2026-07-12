@@ -14,6 +14,7 @@ import {
 import {
   sharedCanvasKey,
   sharedCanvasRevisionKey,
+  smoothMovementBallColorsKey,
   smoothMovementBallsKey,
 } from '../../shared/realtime';
 
@@ -31,9 +32,13 @@ const requireUsername = () => {
 export const redisRouter = router({
   debug: router({
     clearSmoothMovement: moderatorProcedure.mutation(async () => {
-      const key = smoothMovementBallsKey(requirePostId());
-      await redis.del(key);
-      return { deleted: [key] };
+      const postId = requirePostId();
+      const keys = [
+        smoothMovementBallsKey(postId),
+        smoothMovementBallColorsKey(postId),
+      ];
+      await redis.del(...keys);
+      return { deleted: keys };
     }),
     clearSharedCanvas: moderatorProcedure.mutation(async () => {
       const key = sharedCanvasKey(requirePostId());
@@ -57,6 +62,7 @@ export const redisRouter = router({
       const postId = requirePostId();
       const keys = [
         smoothMovementBallsKey(postId),
+        smoothMovementBallColorsKey(postId),
         sharedCanvasKey(postId),
         sharedCanvasRevisionKey(postId),
         `counter:${postId}`,

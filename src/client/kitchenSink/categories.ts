@@ -20,7 +20,10 @@ import {
   startSharedCanvasDemo,
   type SharedCanvasTool,
 } from '../sharedCanvasDemo';
-import { startSmoothMovementDemo } from '../smoothMovementDemo';
+import {
+  setSmoothMovementColor,
+  startSmoothMovementDemo,
+} from '../smoothMovementDemo';
 import {
   chooseTankAction,
   joinTankGame,
@@ -1236,11 +1239,40 @@ const buildSmoothMovement = (container: HTMLElement) => {
     )
   );
 
+  let color = CANVAS_COLORS[5] ?? '#38bdf8';
+  const colorPicker = el('div', 'ks-canvas-toolbar');
+  const colorLabel = el('span', 'ks-row-field-label');
+  colorLabel.textContent = 'Ball color';
+  const colorButtons: HTMLButtonElement[] = [];
+  const updateColorPicker = () => {
+    for (const button of colorButtons) {
+      const selected = button.dataset.color === color;
+      button.classList.toggle('ks-swatch-active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    }
+  };
+  for (const swatch of CANVAS_COLORS) {
+    const button = el('button', 'ks-swatch');
+    button.style.backgroundColor = swatch;
+    button.dataset.color = swatch;
+    button.ariaLabel = `Use ${swatch} for your ball`;
+    button.addEventListener('click', () => void setSmoothMovementColor(swatch));
+    colorButtons.push(button);
+    colorPicker.append(button);
+  }
+  colorPicker.prepend(colorLabel);
+  updateColorPicker();
+
   const gameContainer = el('div', 'ks-phaser-container');
   gameContainer.id = 'smooth-movement-container';
-  container.append(gameContainer);
+  container.append(colorPicker, gameContainer);
 
-  startSmoothMovementDemo('smooth-movement-container');
+  startSmoothMovementDemo('smooth-movement-container', {
+    setColor: (nextColor) => {
+      color = nextColor;
+      updateColorPicker();
+    },
+  });
 };
 
 const buildTankGame = (container: HTMLElement) => {

@@ -1,6 +1,6 @@
 import { showToast } from '@devvit/web/client';
 import * as Phaser from 'phaser';
-import { onBallMoveMessage } from './realtimeChannel';
+import { onBallLeaveMessage, onBallMoveMessage } from './realtimeChannel';
 import { traceClientLog } from './clientLogs';
 import { trpc } from './trpc';
 import {
@@ -16,6 +16,14 @@ const BALL_RADIUS = 18;
 const AUTO_MOVE_DELAY_MS = 650;
 const SNAPSHOT_DELAY_MS = 1_000;
 const smoothMovementClientId = crypto.randomUUID();
+
+export type SmoothMovementControls = {
+  setColor: (color: string) => void;
+};
+
+const defaultControls: SmoothMovementControls = {
+  setColor: () => {},
+};
 
 type BallView = {
   dot: Phaser.GameObjects.Arc;
@@ -55,24 +63,32 @@ const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 class SmoothMovementScene extends Phaser.Scene {
+  controls: SmoothMovementControls;
   playerId: string | undefined;
   balls = new Map<string, BallView>();
   localMoving = false;
   moveInFlight = false;
   joinInFlight = false;
+  leaveInFlight = false;
+  leavePromise: Promise<void> | undefined;
+  presenceRegistered = false;
+  colorChangeInFlight = false;
   joined = false;
   active = false;
   unsubscribeRealtime: (() => void) | undefined;
+  unsubscribeBallLeave: (() => void) | undefined;
   autoMoveTimer: Phaser.Time.TimerEvent | undefined;
   snapshotTimer: Phaser.Time.TimerEvent | undefined;
   statusText!: Phaser.GameObjects.Text;
 
-  constructor() {
+  constructor(controls: SmoothMovementControls) {
     super('SmoothMovementScene');
+    this.controls = controls;
   }
 
   create() {
     this.active = true;
+    registerCurrentScene(this);
     this.cameras.main.setBackgroundColor(0x101624);
     this.drawBackdrop();
 
@@ -98,6 +114,11 @@ class SmoothMovementScene extends Phaser.Scene {
     this.unsubscribeRealtime = onBallMoveMessage((message) => {
       if (this.active) this.applyMove(message);
     });
+    this.unsubscribeBallLeave = onBallLeaveMessage((message) => {
+      if (!this.active) return;
+      const ball = this.balls.get(message.playerId);
+      if (ball) this.destroyBall(message.playerId, ball);
+    });
 
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       if (!this.joined || this.localMoving || this.moveInFlight) return;
@@ -110,16 +131,27 @@ class SmoothMovementScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
     window.addEventListener('pageshow', this.handlePageShow);
+    window.addEventListener('pagehide', this.handlePageHide);
+    window.addEventListener('beforeunload', this.handleBeforeUnload);
 
     void this.join();
   }
 
   handleVisibilityChange = () => {
     if (document.visibilityState === 'visible') void this.join();
+    else void this.leavePresence();
   };
 
   handlePageShow = () => {
     void this.join();
+  };
+
+  handlePageHide = () => {
+    void this.leavePresence();
+  };
+
+  handleBeforeUnload = () => {
+    void this.leavePresence();
   };
 
   override update() {
@@ -154,20 +186,32 @@ class SmoothMovementScene extends Phaser.Scene {
     if (this.active) this.statusText.setText(text);
   }
 
+  canJoinPresence(): boolean {
+    return this.active && document.visibilityState === 'visible';
+  }
+
   async join() {
     if (this.joinInFlight) return;
 
     this.joinInFlight = true;
     traceClientLog('Joining smooth movement demo.');
     try {
+      await this.leavePromise;
+      if (!this.canJoinPresence()) return;
       const snapshot = await trpc.realtime.joinBall.mutate({
         clientId: smoothMovementClientId,
       });
-      if (!this.active) return;
+      if (!this.canJoinPresence()) {
+        this.presenceRegistered = true;
+        void this.leavePresence();
+        return;
+      }
 
       this.playerId = snapshot.selfPlayerId;
+      this.controls.setColor(snapshot.selfColor);
       for (const move of snapshot.moves) this.applyMove(move);
       this.joined = true;
+      this.presenceRegistered = true;
       this.setStatus('Connected. Server-authoritative movement is running.');
       console.info('Joined smooth movement demo.');
       this.scheduleSnapshot();
@@ -182,6 +226,30 @@ class SmoothMovementScene extends Phaser.Scene {
     } finally {
       if (this.active) this.joinInFlight = false;
     }
+  }
+
+  leavePresence(): Promise<void> {
+    if (!this.presenceRegistered || this.leaveInFlight) {
+      return this.leavePromise ?? Promise.resolve();
+    }
+
+    this.presenceRegistered = false;
+    this.leaveInFlight = true;
+    const request = trpc.realtime.leaveBall
+      .mutate({ clientId: smoothMovementClientId })
+      .then(() => undefined)
+      .catch((error) => {
+        console.debug('Failed to leave smooth movement demo:', error);
+        if (this.active && document.visibilityState === 'visible') {
+          this.presenceRegistered = true;
+        }
+      })
+      .finally(() => {
+        this.leaveInFlight = false;
+        if (this.leavePromise === request) this.leavePromise = undefined;
+      });
+    this.leavePromise = request;
+    return request;
   }
 
   async requestMove(to: BallPoint) {
@@ -224,6 +292,26 @@ class SmoothMovementScene extends Phaser.Scene {
     }
   }
 
+  async setColor(color: string): Promise<void> {
+    if (!this.active || this.colorChangeInFlight) return;
+
+    this.colorChangeInFlight = true;
+    try {
+      const result = await trpc.realtime.setBallColor.mutate({ color });
+      if (!this.active) return;
+
+      this.controls.setColor(result.color);
+      if (result.message) this.applyMove(result.message);
+    } catch (error) {
+      if (this.active) {
+        console.error('Failed to set smooth movement color:', error);
+        showToast(`Color update failed: ${errorMessage(error)}`);
+      }
+    } finally {
+      this.colorChangeInFlight = false;
+    }
+  }
+
   finishLocalMove() {
     this.localMoving = false;
     this.setStatus('Connected. Server-authoritative movement is running.');
@@ -245,9 +333,11 @@ class SmoothMovementScene extends Phaser.Scene {
     ball.lastSeenAt = Date.now();
     ball.username = message.username;
     ball.color = message.color;
+    ball.dot.setFillStyle(colorNumber(message.color));
     ball.label.setText(message.username);
     ball.ring.setVisible(isLocal);
     ball.label.setColor(isLocal ? '#ffffff' : '#cbd5e1');
+    if (isLocal) this.controls.setColor(message.color);
 
     if (message.seq === ball.lastSeq) return;
 
@@ -382,21 +472,28 @@ class SmoothMovementScene extends Phaser.Scene {
 
   cleanup() {
     this.active = false;
+    if (currentScene === this) currentScene = undefined;
     this.unsubscribeRealtime?.();
+    this.unsubscribeBallLeave?.();
     document.removeEventListener(
       'visibilitychange',
       this.handleVisibilityChange
     );
     window.removeEventListener('pageshow', this.handlePageShow);
+    window.removeEventListener('pagehide', this.handlePageHide);
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
     this.autoMoveTimer?.remove(false);
     this.snapshotTimer?.remove(false);
     for (const [playerId, ball] of [...this.balls]) {
       this.destroyBall(playerId, ball);
     }
+    void this.leavePresence();
   }
 }
 
-const config: Phaser.Types.Core.GameConfig = {
+const config = (
+  controls: SmoothMovementControls
+): Phaser.Types.Core.GameConfig => ({
   type: Phaser.AUTO,
   audio: { noAudio: true },
   backgroundColor: '#101624',
@@ -406,15 +503,23 @@ const config: Phaser.Types.Core.GameConfig = {
     width: BALL_WORLD_WIDTH,
     height: BALL_WORLD_HEIGHT,
   },
-  scene: [SmoothMovementScene],
-};
+  scene: [new SmoothMovementScene(controls)],
+});
 
 let currentGame: Phaser.Game | undefined;
+let currentScene: SmoothMovementScene | undefined;
 
-export const startSmoothMovementDemo = (parentId: string): Phaser.Game => {
+const registerCurrentScene = (scene: SmoothMovementScene): void => {
+  currentScene = scene;
+};
+
+export const startSmoothMovementDemo = (
+  parentId: string,
+  controls: SmoothMovementControls = defaultControls
+): Phaser.Game => {
   traceClientLog('Starting smooth movement demo:', parentId);
   currentGame?.destroy(true);
-  currentGame = new Phaser.Game({ ...config, parent: parentId });
+  currentGame = new Phaser.Game({ ...config(controls), parent: parentId });
   console.info('Started smooth movement demo:', parentId);
   return currentGame;
 };
@@ -423,4 +528,9 @@ export const stopSmoothMovementDemo = (): void => {
   if (currentGame) traceClientLog('Stopping smooth movement demo.');
   currentGame?.destroy(true);
   currentGame = undefined;
+  currentScene = undefined;
+};
+
+export const setSmoothMovementColor = async (color: string): Promise<void> => {
+  await currentScene?.setColor(color);
 };

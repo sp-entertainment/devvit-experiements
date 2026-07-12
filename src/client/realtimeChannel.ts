@@ -2,6 +2,7 @@ import { connectRealtime, context } from '@devvit/web/client';
 import { traceClientLog } from './clientLogs';
 import type {
   RealtimeBallMoveMessage,
+  RealtimeBallLeaveMessage,
   RealtimeCanvasMessage,
   RealtimeCursorMessage,
   RealtimeMessage,
@@ -17,6 +18,7 @@ import type { RealtimePongStateMessage } from '../shared/pong';
 
 type CursorMessageListener = (msg: RealtimeCursorMessage) => void;
 type BallMoveMessageListener = (msg: RealtimeBallMoveMessage) => void;
+type BallLeaveMessageListener = (msg: RealtimeBallLeaveMessage) => void;
 type CanvasMessageListener = (msg: RealtimeCanvasMessage) => void;
 type TankGameMessageListener = (msg: RealtimeTankGameMessage) => void;
 type PongGameMessageListener = (msg: RealtimePongStateMessage) => void;
@@ -24,6 +26,7 @@ type StatusListener = (connected: boolean) => void;
 
 const cursorListeners = new Set<CursorMessageListener>();
 const ballMoveListeners = new Set<BallMoveMessageListener>();
+const ballLeaveListeners = new Set<BallLeaveMessageListener>();
 const canvasListeners = new Set<CanvasMessageListener>();
 const tankGameListeners = new Set<TankGameMessageListener>();
 const pongGameListeners = new Set<PongGameMessageListener>();
@@ -53,6 +56,8 @@ const ensureConnected = () => {
         cursorListeners.forEach((listener) => listener(msg));
       } else if (msg.type === 'ballMove') {
         ballMoveListeners.forEach((listener) => listener(msg));
+      } else if (msg.type === 'ballLeave') {
+        ballLeaveListeners.forEach((listener) => listener(msg));
       } else if (msg.type === 'tankGameState') {
         tankGameListeners.forEach((listener) => listener(msg));
       } else if (msg.type === 'pongState') {
@@ -80,6 +85,14 @@ export const onBallMoveMessage = (
   ensureConnected();
   ballMoveListeners.add(listener);
   return () => ballMoveListeners.delete(listener);
+};
+
+export const onBallLeaveMessage = (
+  listener: BallLeaveMessageListener
+): (() => void) => {
+  ensureConnected();
+  ballLeaveListeners.add(listener);
+  return () => ballLeaveListeners.delete(listener);
 };
 
 export const onCanvasMessage = (
