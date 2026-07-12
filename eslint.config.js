@@ -65,4 +65,17 @@ export default defineConfig([
     plugins: { js },
     extends: ['js/recommended'],
   },
+  {
+    files: ['tools/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+      parserOptions: {
+        project: false,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'off',
+      'no-unused-vars': 'error',
+    },
+  },
 ]);
