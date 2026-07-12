@@ -18,7 +18,7 @@
     "login": "devvit login",
     "prettier": "prettier --write .",
     "test": "npm run test:unit",
-    "test:unit": "npm run type-check && node --test dist/types/server/*.test.js",
+    "test:unit": "npm run type-check && node --test 'dist/types/server/**/*.test.js' 'tools/**/*.test.mjs'",
     "type-check": "tsc --build"
   },
   "engines": {
