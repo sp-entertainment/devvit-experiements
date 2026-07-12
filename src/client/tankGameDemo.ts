@@ -1,6 +1,5 @@
 import { showToast } from '@devvit/web/client';
 import * as Phaser from 'phaser';
-import { AUTO, Game } from 'phaser';
 import {
   TANK_END_TURN_DURATION_MS,
   TANK_PROJECTILE_RADIUS,
@@ -717,7 +716,7 @@ class TankGameScene extends Phaser.Scene {
 }
 
 const config = (controls: TankGameControls): Phaser.Types.Core.GameConfig => ({
-  type: AUTO,
+  type: Phaser.AUTO,
   audio: { noAudio: true },
   backgroundColor: '#111827',
   scale: {
@@ -729,7 +728,7 @@ const config = (controls: TankGameControls): Phaser.Types.Core.GameConfig => ({
   scene: [new TankGameScene(controls)],
 });
 
-let currentGame: Game | undefined;
+let currentGame: Phaser.Game | undefined;
 let currentScene: TankGameScene | undefined;
 
 const registerCurrentScene = (scene: TankGameScene): void => {
@@ -739,10 +738,10 @@ const registerCurrentScene = (scene: TankGameScene): void => {
 export const startTankGameDemo = (
   parentId: string,
   controls: TankGameControls = defaultControls
-): Game => {
+): Phaser.Game => {
   traceClientLog('Starting tank game demo:', parentId);
   currentGame?.destroy(true);
-  currentGame = new Game({ ...config(controls), parent: parentId });
+  currentGame = new Phaser.Game({ ...config(controls), parent: parentId });
   return currentGame;
 };
 

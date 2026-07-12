@@ -1,5 +1,4 @@
 import * as Phaser from 'phaser';
-import { Game, WEBGL } from 'phaser';
 import { traceClientLog } from './clientLogs';
 
 const HALLWAY_WIDTH = 768;
@@ -117,7 +116,7 @@ class LightingHallwayScene extends Phaser.Scene {
 }
 
 const config: Phaser.Types.Core.GameConfig = {
-  type: WEBGL,
+  type: Phaser.WEBGL,
   audio: { noAudio: true },
   backgroundColor: '#06080d',
   pixelArt: true,
@@ -133,12 +132,12 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [LightingHallwayScene],
 };
 
-let currentGame: Game | undefined;
+let currentGame: Phaser.Game | undefined;
 
-export const startLightingHallwayDemo = (parentId: string): Game => {
+export const startLightingHallwayDemo = (parentId: string): Phaser.Game => {
   traceClientLog('Starting Phaser lighting hallway demo:', parentId);
   currentGame?.destroy(true);
-  currentGame = new Game({ ...config, parent: parentId });
+  currentGame = new Phaser.Game({ ...config, parent: parentId });
   return currentGame;
 };
 

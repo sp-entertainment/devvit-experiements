@@ -1,4 +1,3 @@
-import './clientLogs';
 import { context, showToast } from '@devvit/web/client';
 import {
   hasUnclearedErrors,

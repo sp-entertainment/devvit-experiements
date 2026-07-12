@@ -1,6 +1,5 @@
 import { context, showToast } from '@devvit/web/client';
 import * as Phaser from 'phaser';
-import { AUTO, Game } from 'phaser';
 import {
   PONG_BALL_RADIUS,
   PONG_PADDLE_HEIGHT,
@@ -1056,7 +1055,7 @@ const isFreshForView = (lastSeenAt: number, now: number): boolean =>
   now - lastSeenAt < PONG_STALE_MS;
 
 const config = (controls: PongGameControls): Phaser.Types.Core.GameConfig => ({
-  type: AUTO,
+  type: Phaser.AUTO,
   audio: { noAudio: true },
   backgroundColor: '#000000',
   render: { roundPixels: true },
@@ -1069,7 +1068,7 @@ const config = (controls: PongGameControls): Phaser.Types.Core.GameConfig => ({
   scene: [new PongScene(controls)],
 });
 
-let currentGame: Game | undefined;
+let currentGame: Phaser.Game | undefined;
 let currentScene: PongScene | undefined;
 
 const registerCurrentScene = (scene: PongScene): void => {
@@ -1079,10 +1078,10 @@ const registerCurrentScene = (scene: PongScene): void => {
 export const startPongGame = (
   parentId: string,
   controls: PongGameControls = defaultControls
-): Game => {
+): Phaser.Game => {
   traceClientLog('Starting Pong game:', parentId);
   currentGame?.destroy(true);
-  currentGame = new Game({ ...config(controls), parent: parentId });
+  currentGame = new Phaser.Game({ ...config(controls), parent: parentId });
   return currentGame;
 };
 
