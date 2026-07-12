@@ -25,15 +25,21 @@ import {
 
 const LOBBY_TTL_MS = 24 * 60 * 60 * 1_000;
 const PENDING_JOIN_TTL_MS = 10_000;
-const ACTIVE_LOCK_TTL_MS = 35_000;
 const RUN_START_DELAY_MS = 500;
 const STALE_RUN_GRACE_MS = 20_000;
+const ACTIVE_LOCK_TTL_MS =
+  RUN_START_DELAY_MS +
+  REALTIME_STRESS_DURATION_MS +
+  STALE_RUN_GRACE_MS +
+  10_000;
+const MAX_PARTICIPANTS = 10;
 const ACTIVE_LOCK_KEY = 'realtime-stress:v2:active-run';
 
 const clientIdSchema = z.string().uuid();
 
 const participantSchema = z.object({
   clientId: clientIdSchema,
+  ownerId: z.string().min(1),
   username: z.string().min(1).max(100),
   ready: z.boolean(),
   joinedAt: z.number().int(),
@@ -159,6 +165,24 @@ const requireUsername = (): string => {
   return context.username;
 };
 
+const requireUser = (): { userId: string; username: string } => {
+  if (!context.userId) throw new Error('Must be logged in');
+  return { userId: context.userId, username: requireUsername() };
+};
+
+const requireParticipantOwner = (
+  participant: z.infer<typeof participantSchema> | undefined,
+  userId: string
+): z.infer<typeof participantSchema> => {
+  if (!participant) throw new Error('Join the stress test first');
+  if (participant.ownerId !== userId) {
+    throw new Error(
+      'This stress-test client belongs to another Reddit account'
+    );
+  }
+  return participant;
+};
+
 const lobbyKey = (postId: string): string =>
   `realtime-stress:v2:lobby:${postId}`;
 
@@ -252,7 +276,14 @@ const snapshot = (
   return {
     status: state.status,
     lobbyId: state.lobbyId,
-    participants,
+    participants: participants.map(
+      ({ clientId, username, ready, joinedAt }) => ({
+        clientId,
+        username,
+        ready,
+        joinedAt,
+      })
+    ),
     readyCount: participants.filter((participant) => participant.ready).length,
     pendingCount: participants.filter((participant) => !participant.ready)
       .length,
@@ -339,6 +370,9 @@ const finalizeRun = async (
     if (!current || current.run?.runId !== runId) {
       throw new Error('Stress-test run is no longer current');
     }
+    if (current.status !== 'running') {
+      return { state: current, value: undefined };
+    }
     current.status = summary.outcome === 'completed' ? 'completed' : 'failed';
     current.summary = summary;
     return { state: current, value: undefined };
@@ -408,14 +442,26 @@ export const realtimeStressRouter = router({
     .input(z.object({ clientId: clientIdSchema }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
-      const username = requireUsername();
+      const { userId, username } = requireUser();
       return await mutateLobby(postId, (current, now) => {
         const state = current ?? createLobby(postId, now);
         if (state.status !== 'idle') {
           throw new Error('This stress test has already started');
         }
+        const existing = state.participants[input.clientId];
+        if (existing && existing.ownerId !== userId) {
+          throw new Error(
+            'This stress-test client belongs to another Reddit account'
+          );
+        }
+        if (!existing && activeParticipants(state).length >= MAX_PARTICIPANTS) {
+          throw new Error(
+            `Stress-test lobbies support at most ${MAX_PARTICIPANTS} clients`
+          );
+        }
         state.participants[input.clientId] = {
           clientId: input.clientId,
+          ownerId: userId,
           username,
           ready: false,
           joinedAt: now,
@@ -435,6 +481,7 @@ export const realtimeStressRouter = router({
     .input(z.object({ clientId: clientIdSchema, lobbyId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
+      const { userId } = requireUser();
       return await mutateLobby(postId, (current) => {
         if (!current || current.lobbyId !== input.lobbyId) {
           throw new Error('Stress-test lobby changed; join again');
@@ -442,8 +489,10 @@ export const realtimeStressRouter = router({
         if (current.status !== 'idle') {
           throw new Error('The participant roster is already frozen');
         }
-        const participant = current.participants[input.clientId];
-        if (!participant) throw new Error('Join the stress test first');
+        const participant = requireParticipantOwner(
+          current.participants[input.clientId],
+          userId
+        );
         participant.ready = true;
         return { state: current, value: snapshot(current, Date.now()) };
       });
@@ -453,11 +502,13 @@ export const realtimeStressRouter = router({
     .input(z.object({ clientId: clientIdSchema, lobbyId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
+      const { userId } = requireUser();
       return await mutateLobby(postId, (current) => {
         if (!current || current.lobbyId !== input.lobbyId) {
           throw new Error('Stress-test lobby is no longer current');
         }
         if (current.status !== 'idle') return { state: current, value: false };
+        requireParticipantOwner(current.participants[input.clientId], userId);
         delete current.participants[input.clientId];
         return { state: current, value: true };
       });
@@ -479,6 +530,7 @@ export const realtimeStressRouter = router({
     .input(z.object({ clientId: clientIdSchema, lobbyId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
+      const { userId } = requireUser();
       const runId = randomUUID();
       const ownedLockValue = lockValue(postId, runId);
       const acquired = await redis.set(ACTIVE_LOCK_KEY, ownedLockValue, {
@@ -514,8 +566,11 @@ export const realtimeStressRouter = router({
           }
 
           const participants = activeParticipants(current);
-          const caller = current.participants[input.clientId];
-          if (!caller?.ready)
+          const caller = requireParticipantOwner(
+            current.participants[input.clientId],
+            userId
+          );
+          if (!caller.ready)
             throw new Error('Join the stress test before starting');
           if (participants.some((participant) => !participant.ready)) {
             throw new Error('Wait for pending clients to finish joining');
@@ -596,7 +651,7 @@ export const realtimeStressRouter = router({
     .input(clientResultSchema)
     .mutation(async ({ input }) => {
       const postId = requirePostId();
-      const username = requireUsername();
+      const { userId } = requireUser();
       return await mutateLobby(postId, (current) => {
         if (!current?.run || current.run.runId !== input.runId) {
           throw new Error('Stress-test run is no longer current');
@@ -607,9 +662,13 @@ export const realtimeStressRouter = router({
         if (!current.run.participantIds.includes(input.clientId)) {
           throw new Error('Only joined clients can submit results');
         }
+        const participant = requireParticipantOwner(
+          current.participants[input.clientId],
+          userId
+        );
         const result: RealtimeStressClientResult = {
           ...input,
-          username,
+          username: participant.username,
           submittedAt: Date.now(),
         };
         current.results[input.clientId] = result;
