@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { publicProcedure, router } from '../trpc';
+import { moderatorProcedure, router } from '../trpc';
 import {
   clearServerLogs,
   listServerLogs,
@@ -8,13 +8,13 @@ import {
 } from '../core/serverLogs';
 
 export const logsRouter = router({
-  listServerLogs: publicProcedure.query(async () => await listServerLogs()),
-  setServerLogLimit: publicProcedure
+  listServerLogs: moderatorProcedure.query(async () => await listServerLogs()),
+  setServerLogLimit: moderatorProcedure
     .input(z.object({ limit: z.number().int().min(1).max(5000) }))
     .mutation(async ({ input }) => ({
       limit: await setServerLogLimit(input.limit),
     })),
-  clearServerLogs: publicProcedure.mutation(async () => {
+  clearServerLogs: moderatorProcedure.mutation(async () => {
     await clearServerLogs();
     return { success: true };
   }),

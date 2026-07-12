@@ -16,7 +16,12 @@ import {
   retryRedisTransaction,
 } from '../redisTransactionRetry';
 import { runRealtimeStress } from '../realtimeStressRunner';
-import { publicProcedure, router } from '../trpc';
+import {
+  authenticatedProcedure,
+  moderatorProcedure,
+  publicProcedure,
+  router,
+} from '../trpc';
 
 const LOBBY_TTL_MS = 24 * 60 * 60 * 1_000;
 const PENDING_JOIN_TTL_MS = 10_000;
@@ -399,7 +404,7 @@ const pruneStalePendingParticipants = async (
 };
 
 export const realtimeStressRouter = router({
-  join: publicProcedure
+  join: authenticatedProcedure
     .input(z.object({ clientId: clientIdSchema }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
@@ -426,7 +431,7 @@ export const realtimeStressRouter = router({
       });
     }),
 
-  ready: publicProcedure
+  ready: authenticatedProcedure
     .input(z.object({ clientId: clientIdSchema, lobbyId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
@@ -444,7 +449,7 @@ export const realtimeStressRouter = router({
       });
     }),
 
-  leave: publicProcedure
+  leave: authenticatedProcedure
     .input(z.object({ clientId: clientIdSchema, lobbyId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
@@ -470,7 +475,7 @@ export const realtimeStressRouter = router({
     return snapshot(state, Date.now());
   }),
 
-  start: publicProcedure
+  start: moderatorProcedure
     .input(z.object({ clientId: clientIdSchema, lobbyId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const postId = requirePostId();
@@ -587,7 +592,7 @@ export const realtimeStressRouter = router({
       }
     }),
 
-  submitResult: publicProcedure
+  submitResult: authenticatedProcedure
     .input(clientResultSchema)
     .mutation(async ({ input }) => {
       const postId = requirePostId();
@@ -612,7 +617,7 @@ export const realtimeStressRouter = router({
       });
     }),
 
-  reset: publicProcedure.mutation(async () => {
+  reset: moderatorProcedure.mutation(async () => {
     const postId = requirePostId();
     return await mutateLobby(postId, (current, now) => {
       if (current?.status === 'running') {

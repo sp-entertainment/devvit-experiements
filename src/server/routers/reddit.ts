@@ -9,7 +9,12 @@ import type {
   WikiPage,
   WikiPageRevision,
 } from '@devvit/web/server';
-import { router, publicProcedure } from '../trpc';
+import {
+  authenticatedProcedure,
+  moderatorProcedure,
+  publicProcedure,
+  router,
+} from '../trpc';
 
 const requirePostId = () => {
   if (!context.postId)
@@ -177,7 +182,7 @@ export const redditRouter = router({
 
   listings: router({
     // Compare the common listing endpoints side by side; useful for seeing sort behavior.
-    compare: publicProcedure
+    compare: moderatorProcedure
       .input(z.object({ limit: z.number().int().min(1).max(10).default(3) }))
       .query(async ({ input }) => {
         const base = listingOptions(input.limit);
@@ -200,7 +205,7 @@ export const redditRouter = router({
   }),
 
   inspect: router({
-    currentPost: publicProcedure
+    currentPost: moderatorProcedure
       .input(
         z.object({ commentsLimit: z.number().int().min(0).max(20).default(5) })
       )
@@ -218,13 +223,13 @@ export const redditRouter = router({
           comments: comments.map(summarizeComment),
         };
       }),
-    post: publicProcedure
+    post: moderatorProcedure
       .input(z.object({ postId: postIdInput }))
       .query(async ({ input }) => {
         const post = await reddit.getPostById(input.postId);
         return summarizePost(post);
       }),
-    comment: publicProcedure
+    comment: moderatorProcedure
       .input(z.object({ commentId: commentIdInput }))
       .query(async ({ input }) => {
         const comment = await reddit.getCommentById(input.commentId);
@@ -242,7 +247,7 @@ export const redditRouter = router({
 
   // reddit.submitCustomPost(): the classic "Hello World" example - creates a brand new
   // Devvit interactive post in the current subreddit on behalf of the app account.
-  createHelloWorldPost: publicProcedure.mutation(async () => {
+  createHelloWorldPost: moderatorProcedure.mutation(async () => {
     const post = await reddit.submitCustomPost({
       subredditName: context.subredditName,
       title: 'Hello World from Devvit!',
@@ -256,7 +261,7 @@ export const redditRouter = router({
 
   userActions: router({
     // User Action scopes let this run as the viewer instead of the app account.
-    submitPostAsUser: publicProcedure
+    submitPostAsUser: authenticatedProcedure
       .input(
         z.object({
           title: z
@@ -280,7 +285,7 @@ export const redditRouter = router({
         });
         return summarizePost(post);
       }),
-    commentOnCurrentPostAsUser: publicProcedure
+    commentOnCurrentPostAsUser: authenticatedProcedure
       .input(
         z.object({
           text: z
@@ -298,11 +303,11 @@ export const redditRouter = router({
         });
         return summarizeComment(comment);
       }),
-    subscribeAsUser: publicProcedure.mutation(async () => {
+    subscribeAsUser: authenticatedProcedure.mutation(async () => {
       await reddit.subscribeToCurrentSubreddit();
       return { success: true };
     }),
-    unsubscribeAsUser: publicProcedure.mutation(async () => {
+    unsubscribeAsUser: authenticatedProcedure.mutation(async () => {
       await reddit.unsubscribeFromCurrentSubreddit();
       return {
         success: true,
@@ -312,7 +317,7 @@ export const redditRouter = router({
   }),
 
   // reddit.submitComment(): reply directly on the post the kitchen sink is running in.
-  commentOnPost: publicProcedure
+  commentOnPost: moderatorProcedure
     .input(z.object({ text: z.string().min(1).max(2000) }))
     .mutation(async ({ input }) => {
       const comment = await reddit.submitComment({
@@ -323,7 +328,7 @@ export const redditRouter = router({
     }),
 
   // reddit.setUserFlair(): set the calling user's flair in the current subreddit.
-  setMyFlair: publicProcedure
+  setMyFlair: moderatorProcedure
     .input(z.object({ text: z.string().min(1).max(64) }))
     .mutation(async ({ input }) => {
       if (!context.username) throw new Error('Must be logged in to set flair');
@@ -341,7 +346,7 @@ export const redditRouter = router({
     get: publicProcedure.query(async () => {
       return (await reddit.getPostData(requirePostId())) ?? null;
     }),
-    set: publicProcedure
+    set: moderatorProcedure
       .input(z.object({ note: z.string().max(200) }))
       .mutation(async ({ input }) => {
         await reddit.setPostData(requirePostId(), {
@@ -359,7 +364,7 @@ export const redditRouter = router({
   }),
 
   flair: router({
-    templates: publicProcedure.query(async () => {
+    templates: moderatorProcedure.query(async () => {
       const [postFlairs, userFlairs] = await Promise.all([
         reddit.getPostFlairTemplates(context.subredditName),
         reddit.getUserFlairTemplates(context.subredditName),
@@ -369,7 +374,7 @@ export const redditRouter = router({
         userFlairs: userFlairs.map(summarizeFlairTemplate),
       };
     }),
-    setPost: publicProcedure
+    setPost: moderatorProcedure
       .input(
         z.object({
           postId: postIdInput.optional(),
@@ -385,7 +390,7 @@ export const redditRouter = router({
         });
         return { success: true, postId, text: input.text };
       }),
-    removePost: publicProcedure
+    removePost: moderatorProcedure
       .input(z.object({ postId: postIdInput.optional() }))
       .mutation(async ({ input }) => {
         const postId = input.postId ?? requirePostId();
@@ -412,7 +417,7 @@ export const redditRouter = router({
         };
       }
     }),
-    updateSandbox: publicProcedure
+    updateSandbox: moderatorProcedure
       .input(z.object({ markdown: z.string().min(1).max(4000) }))
       .mutation(async ({ input }) => {
         try {
@@ -433,7 +438,7 @@ export const redditRouter = router({
           return summarizeWikiPage(page);
         }
       }),
-    revisions: publicProcedure.query(async () => {
+    revisions: moderatorProcedure.query(async () => {
       const revisions = await reddit
         .getWikiPageRevisions({
           subredditName: context.subredditName,
@@ -446,7 +451,7 @@ export const redditRouter = router({
   }),
 
   moderation: router({
-    snapshot: publicProcedure
+    snapshot: moderatorProcedure
       .input(z.object({ limit: z.number().int().min(1).max(10).default(5) }))
       .query(async ({ input }) => {
         const [rules, modQueue, reports] = await Promise.all([

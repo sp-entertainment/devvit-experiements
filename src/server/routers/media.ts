@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { media } from '@devvit/web/server';
-import { router, publicProcedure } from '../trpc';
+import { moderatorProcedure, router } from '../trpc';
 
 export const mediaRouter = router({
   // media.upload(): fetches a publicly reachable URL and re-hosts it on Reddit's media
   // CDN, returning a `mediaId` + `mediaUrl` you can render or attach to a post.
-  uploadFromUrl: publicProcedure
+  uploadFromUrl: moderatorProcedure
     .input(
       z.object({
         url: z.string().url(),

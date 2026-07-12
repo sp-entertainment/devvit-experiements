@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { context, notifications } from '@devvit/web/server';
-import { router, publicProcedure } from '../trpc';
+import { authenticatedProcedure, router } from '../trpc';
 
 // NOTE: Push notifications are an @experimental Devvit capability. Delivery to real
 // devices requires the app to be approved for the notifications permission - these
@@ -14,21 +14,21 @@ const requireUserId = () => {
 
 export const notificationsRouter = router({
   // notifications.optInCurrentUser() / .optOutCurrentUser(): per-user push preference.
-  optIn: publicProcedure.mutation(
+  optIn: authenticatedProcedure.mutation(
     async () => await notifications.optInCurrentUser()
   ),
-  optOut: publicProcedure.mutation(
+  optOut: authenticatedProcedure.mutation(
     async () => await notifications.optOutCurrentUser()
   ),
 
   // notifications.isOptedIn(): check the calling user's current opt-in state.
-  checkOptedIn: publicProcedure.query(async () => {
+  checkOptedIn: authenticatedProcedure.query(async () => {
     return { optedIn: await notifications.isOptedIn(requireUserId()) };
   }),
 
   // notifications.enqueue(): queue a push notification (title/body support mustache
   // templating) to up to 1000 recipients - here, just the calling user, as a test.
-  sendTestPush: publicProcedure
+  sendTestPush: authenticatedProcedure
     .input(
       z.object({
         title: z.string().min(1).max(80),
@@ -49,15 +49,15 @@ export const notificationsRouter = router({
 
   // Game badge helpers: surface a small badge on the post icon in-feed.
   gameBadge: router({
-    request: publicProcedure.mutation(async () => {
+    request: authenticatedProcedure.mutation(async () => {
       if (!context.postId)
         throw new Error('postId is required but missing from context');
       return await notifications.requestShowGameBadge({ post: context.postId });
     }),
-    dismiss: publicProcedure.mutation(
+    dismiss: authenticatedProcedure.mutation(
       async () => await notifications.dismissGameBadge()
     ),
-    status: publicProcedure.query(
+    status: authenticatedProcedure.query(
       async () => await notifications.getGameBadgeStatus()
     ),
   }),
